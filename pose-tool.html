@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pose Reference Tool</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;650&display=swap">
+<style>
+:root{
+  --stage:#dde2e6; --grid:#b9c2c9; --panel:#f7f8f9; --ink:#1c2329; --muted:#5c6870;
+  --line:#c5ccd1; --accent:#2f5bd6; --accent-ink:#ffffff; --hover:#e9edf0; --handle:#ffb000;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --stage:#1d2226; --grid:#39424a; --panel:#262c31; --ink:#e6eaed; --muted:#98a4ad;
+    --line:#3b444b; --accent:#7fa2ff; --accent-ink:#10151a; --hover:#30373d; --handle:#ffc233;
+  }
+}
+:root[data-theme="dark"]{
+  --stage:#1d2226; --grid:#39424a; --panel:#262c31; --ink:#e6eaed; --muted:#98a4ad;
+  --line:#3b444b; --accent:#7fa2ff; --accent-ink:#10151a; --hover:#30373d; --handle:#ffc233;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;background:var(--stage);color:var(--ink);
+  font-family:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.4;overflow:hidden}
+#app{position:relative;height:100%}
+#stage{position:absolute;inset:0}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+
+#panel{position:absolute;top:12px;left:12px;width:232px;max-height:calc(100% - 24px);overflow:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+#panel h1{font-size:15px;font-weight:650;margin:0;letter-spacing:.01em}
+.head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.group{margin-top:14px}
+.group > h2{font-size:12px;font-weight:500;color:var(--muted);margin:0 0 6px}
+button{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;
+  padding:6px 9px;cursor:pointer;text-align:left}
+button:hover{background:var(--hover)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.row button{flex:1 1 auto;text-align:center}
+#figs{list-style:none;margin:0 0 6px;padding:0;display:grid;gap:3px}
+#figs li{display:flex;gap:3px}
+#figs .pickfig{flex:1;display:flex;align-items:center;gap:8px;border-color:transparent}
+#figs .pickfig[aria-pressed="true"]{border-color:var(--accent);background:var(--hover)}
+#figs .dot{width:11px;height:11px;border-radius:50%;flex:none}
+#figs .del{padding:6px 8px;border-color:transparent;color:var(--muted)}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;border:0;border-radius:0;text-align:center}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+label.check{display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer}
+#hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);max-width:calc(100% - 24px);
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;color:var(--muted);text-align:center}
+#collapse{padding:3px 8px;color:var(--muted)}
+#panel.closed .group{display:none}
+
+#sheet{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(10,14,18,.45);padding:16px}
+#sheet.open{display:flex}
+#sheet .card{width:min(560px,100%);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+#sheet h2{font-size:15px;font-weight:650;margin:0 0 4px}
+#sheet p{margin:0 0 8px;color:var(--muted)}
+#json{width:100%;height:240px;resize:vertical;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;
+  background:var(--stage);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+#jsonmsg{min-height:1.4em;margin:6px 0;color:var(--muted)}
+#fail{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center}
+@media (max-width:560px){ #panel{width:200px} #hint{font-size:12px} }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage"></div>
+
+  <div id="panel">
+    <div class="head">
+      <h1>Pose reference</h1>
+      <button id="collapse" aria-expanded="true" aria-label="Hide or show the panel">Hide</button>
+    </div>
+
+    <div class="group">
+      <h2>Figures</h2>
+      <ul id="figs"></ul>
+      <div class="row">
+        <button id="add">Add figure</button>
+        <button id="dup">Duplicate</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Hips and floor ring</h2>
+      <div class="seg" role="group" aria-label="Hips and floor ring mode">
+        <button id="modeMove" aria-pressed="true">Move</button>
+        <button id="modeRot" aria-pressed="false">Rotate</button>
+      </div>
+      <label class="check"><input type="checkbox" id="pin" checked> Keep feet planted when hips move</label>
+    </div>
+
+    <div class="group">
+      <h2>Pose</h2>
+      <div class="row">
+        <button id="reset">Reset pose</button>
+        <button id="floor">Drop to floor</button>
+        <button id="undo">Undo</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Scene data</h2>
+      <div class="row">
+        <button id="export">Show scene JSON</button>
+        <button id="import">Load scene JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint"></div>
+
+  <div id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="card">
+      <h2 id="sheetTitle">Scene JSON</h2>
+      <p id="sheetText"></p>
+      <textarea id="json" spellcheck="false" aria-label="Scene JSON"></textarea>
+      <div id="jsonmsg" role="status"></div>
+      <div class="row">
+        <button id="jsonApply" class="primary">Load scene</button>
+        <button id="jsonCopy">Copy</button>
+        <button id="jsonClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fail">The 3D library did not load. Check your connection and reload the page.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+<script>
+(function(){
+'use strict';
+if(!window.THREE || !THREE.OrbitControls || !THREE.TransformControls){
+  document.getElementById('fail').style.display='flex'; return;
+}
+const V3=THREE.Vector3, Q=THREE.Quaternion;
+const $=id=>document.getElementById(id);
+
+/*IK-BEGIN*/
+const _q=new Q(), _pw=new Q(), _w=new Q();
+// Rotate obj so a world-space direction `from` ends up pointing along `to`, with the least rotation.
+function rotateWorld(obj, from, to){
+  _q.setFromUnitVectors(from, to);
+  obj.parent.getWorldQuaternion(_pw);
+  obj.getWorldQuaternion(_w);
+  _w.premultiply(_q);
+  obj.quaternion.copy(_pw.invert().multiply(_w));
+  obj.updateMatrixWorld(true);
+}
+function setWorldQuat(obj, wq){
+  obj.parent.getWorldQuaternion(_pw);
+  obj.quaternion.copy(_pw.invert().multiply(wq));
+  obj.updateMatrixWorld(true);
+}
+// Analytic two-bone IK. Keeps the current bend direction; `hint` is used when the limb is straight.
+function solveLimb(upper, lower, end, target, hint, endQuat){
+  const A=upper.getWorldPosition(new V3()), B=lower.getWorldPosition(new V3()), C=end.getWorldPosition(new V3());
+  const l1=A.distanceTo(B), l2=B.distanceTo(C);
+  const toT=target.clone().sub(A); const len=toT.length();
+  if(len<1e-5) return;
+  const dir=toT.divideScalar(len);
+  const d=Math.min(Math.max(len, Math.abs(l1-l2)+1e-3), (l1+l2)*0.999);
+  const ab=B.clone().sub(A);
+  let bend=ab.clone().addScaledVector(dir, -ab.dot(dir));
+  if(bend.lengthSq()<1e-5) bend=hint.clone().addScaledVector(dir, -hint.dot(dir));
+  if(bend.lengthSq()<1e-8){ bend=new V3(0,1,0).cross(dir); if(bend.lengthSq()<1e-8) bend=new V3(1,0,0).cross(dir); }
+  bend.normalize();
+  const a=(l1*l1-l2*l2+d*d)/(2*d);
+  const h=Math.sqrt(Math.max(0, l1*l1-a*a));
+  const Bn=A.clone().addScaledVector(dir,a).addScaledVector(bend,h);
+  rotateWorld(upper, ab.normalize(), Bn.sub(A).normalize());
+  const B2=lower.getWorldPosition(new V3()), C2=end.getWorldPosition(new V3());
+  const Tn=A.clone().addScaledVector(dir,d);
+  rotateWorld(lower, C2.sub(B2).normalize(), Tn.sub(B2).normalize());
+  if(endQuat) setWorldQuat(end, endQuat);
+}
+/*IK-END*/
+
+// ---------- Skeleton definition (VRM humanoid bone names, T-pose, facing +Z, metres) ----------
+const BONES=[
+  ['hips',null,[0,0.98,0]],
+  ['spine','hips',[0,0.10,0]],
+  ['chest','spine',[0,0.15,0]],
+  ['neck','chest',[0,0.26,0]],
+  ['head','neck',[0,0.09,0]],
+  ['leftUpperArm','chest',[0.19,0.20,0]],
+  ['leftLowerArm','leftUpperArm',[0.28,0,0]],
+  ['leftHand','leftLowerArm',[0.26,0,0]],
+  ['rightUpperArm','chest',[-0.19,0.20,0]],
+  ['rightLowerArm','rightUpperArm',[-0.28,0,0]],
+  ['rightHand','rightLowerArm',[-0.26,0,0]],
+  ['leftUpperLeg','hips',[0.095,-0.05,0]],
+  ['leftLowerLeg','leftUpperLeg',[0,-0.43,0]],
+  ['leftFoot','leftLowerLeg',[0,-0.43,0]],
+  ['rightUpperLeg','hips',[-0.095,-0.05,0]],
+  ['rightLowerLeg','rightUpperLeg',[0,-0.43,0]],
+  ['rightFoot','rightLowerLeg',[0,-0.43,0]]
+];
+const REST={}; BONES.forEach(b=>REST[b[0]]=b[2]);
+const LIMBS={
+  leftHand:['leftUpperArm','leftLowerArm','leftHand','arm'],
+  rightHand:['rightUpperArm','rightLowerArm','rightHand','arm'],
+  leftFoot:['leftUpperLeg','leftLowerLeg','leftFoot','leg'],
+  rightFoot:['rightUpperLeg','rightLowerLeg','rightFoot','leg']
+};
+const LABEL={hips:'hips',spine:'lower spine',chest:'chest',neck:'neck',head:'head',
+  leftUpperArm:'left upper arm',leftLowerArm:'left forearm',leftHand:'left hand',
+  rightUpperArm:'right upper arm',rightLowerArm:'right forearm',rightHand:'right hand',
+  leftUpperLeg:'left thigh',leftLowerLeg:'left shin',leftFoot:'left foot',
+  rightUpperLeg:'right thigh',rightLowerLeg:'right shin',rightFoot:'right foot'};
+const PALETTE=['#c9a57a','#6f8fb8','#8aa978','#a585b5','#c98b8b','#7fb0ad'];
+
+function cyl(r0, r1, to){
+  const v=new V3(to[0],to[1],to[2]), len=v.length();
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, len, 18));
+  m.position.copy(v).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(new V3(0,1,0), v.clone().normalize());
+  return m;
+}
+function ball(r, at, scale){
+  const m=new THREE.Mesh(new THREE.SphereGeometry(r, 22, 16));
+  if(at) m.position.set(at[0],at[1],at[2]);
+  if(scale) m.scale.set(scale[0],scale[1],scale[2]);
+  return m;
+}
+function box(size, at){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(size[0],size[1],size[2]));
+  m.position.set(at[0],at[1],at[2]); return m;
+}
+function partsFor(name){
+  const s=name.indexOf('right')===0 ? -1 : 1;
+  switch(name.replace(/^(left|right)/,'')){
+    case 'hips': return [ball(0.13,null,[1.3,0.85,0.95])];
+    case 'spine': { const c=cyl(0.10,0.11,[0,0.15,0]); c.scale.x=1.25; return [c]; }
+    case 'chest': return [ball(0.16,[0,0.12,0],[1.25,1.05,0.8])];
+    case 'neck': return [cyl(0.045,0.04,[0,0.09,0])];
+    case 'head': return [ball(0.105,[0,0.12,0],[0.88,1.12,1]), box([0.025,0.03,0.03],[0,0.10,0.105])];
+    case 'UpperArm': return [ball(0.055), cyl(0.05,0.04,[s*0.28,0,0])];
+    case 'LowerArm': return [ball(0.042), cyl(0.04,0.032,[s*0.26,0,0])];
+    case 'Hand': return [ball(0.034), box([0.10,0.03,0.075],[s*0.065,0,0])];
+    case 'UpperLeg': return [ball(0.075), cyl(0.072,0.052,[0,-0.43,0])];
+    case 'LowerLeg': return [ball(0.054), cyl(0.052,0.04,[0,-0.43,0])];
+    case 'Foot': return [ball(0.044), box([0.095,0.06,0.24],[0,-0.04,0.07])];
+  }
+  return [];
+}
+
+// ---------- Scene ----------
+const stage=$('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.outputEncoding=THREE.sRGBEncoding;
+stage.appendChild(renderer.domElement);
+const dom=renderer.domElement;
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(40, 1, 0.05, 100);
+camera.position.set(0.6, 1.45, 4.4);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x7d8690, 0.95));
+const sun=new THREE.DirectionalLight(0xffffff, 0.65); sun.position.set(2,4,3); scene.add(sun);
+
+const orbit=new THREE.OrbitControls(camera, dom);
+orbit.target.set(0.3, 0.95, 0); orbit.enableDamping=true; orbit.dampingFactor=0.12; orbit.maxPolarAngle=Math.PI*0.52;
+const tc=new THREE.TransformControls(camera, dom);
+tc.setSize(0.75); scene.add(tc);
+
+let grid=null;
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function applyTheme(){
+  renderer.setClearColor(new THREE.Color(cssVar('--stage')||'#dde2e6'));
+  if(grid){ scene.remove(grid); grid.geometry.dispose(); }
+  const g=new THREE.Color(cssVar('--grid')||'#b9c2c9');
+  grid=new THREE.GridHelper(12, 24, g, g); scene.add(grid);
+  const hc=new THREE.Color(cssVar('--handle')||'#ffb000');
+  HANDLE_KEYS.forEach(k=>handles[k].material.color.copy(hc));
+}
+
+// IK handles: one shared set, shown on the active figure.
+const HANDLE_KEYS=['leftHand','rightHand','leftFoot','rightFoot','hips'];
+const handles={};
+HANDLE_KEYS.forEach(k=>{
+  const geo= k==='hips' ? new THREE.BoxGeometry(0.075,0.075,0.075) : new THREE.SphereGeometry(0.04,16,12);
+  const m=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0xffb000, depthTest:false, transparent:true, opacity:0.95}));
+  m.renderOrder=10; m.visible=false; m.userData.handle=k; scene.add(m); handles[k]=m;
+});
+const handleList=HANDLE_KEYS.map(k=>handles[k]);
+
+const figures=[];
+let active=null, sel=null, mode='move', drag=null, counter=0;
+const undoStack=[];
+function uid(){ return 'f'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36); }
+
+function createFigure(d){
+  const fig={id:d.id||uid(), name:d.name||'Figure', color:d.color||PALETTE[0], bones:{}, meshes:{}, pick:[]};
+  fig.root=new THREE.Group();
+  fig.mat=new THREE.MeshStandardMaterial({color:fig.color, roughness:0.78, metalness:0});
+  fig.matSel=new THREE.MeshStandardMaterial({color:fig.color, roughness:0.78, metalness:0, emissive:0xffb000, emissiveIntensity:0.45});
+  BONES.forEach(def=>{
+    const b=new THREE.Group(); b.name=def[0]; b.position.set(def[2][0],def[2][1],def[2][2]);
+    (def[1] ? fig.bones[def[1]] : fig.root).add(b);
+    fig.bones[def[0]]=b; fig.meshes[def[0]]=[];
+    partsFor(def[0]).forEach(m=>{
+      m.material=fig.mat; m.userData={fig:fig, bone:def[0]};
+      b.add(m); fig.meshes[def[0]].push(m); fig.pick.push(m);
+    });
+  });
+  const ring=new THREE.Mesh(new THREE.RingGeometry(0.25,0.35,48),
+    new THREE.MeshBasicMaterial({color:fig.color, transparent:true, opacity:0.6, side:THREE.DoubleSide}));
+  ring.rotation.x=-Math.PI/2; ring.position.y=0.004; ring.userData={fig:fig, base:true};
+  fig.root.add(ring); fig.pick.push(ring); fig.ring=ring;
+  if(d.root){ fig.root.position.set(+d.root.x||0, 0, +d.root.z||0); fig.root.rotation.y=+d.root.ry||0; }
+  if(Array.isArray(d.hips) && d.hips.length===3) fig.bones.hips.position.fromArray(d.hips.map(Number));
+  if(d.pose) Object.keys(d.pose).forEach(n=>{
+    const q=d.pose[n];
+    if(fig.bones[n] && Array.isArray(q) && q.length===4) fig.bones[n].quaternion.fromArray(q.map(Number)).normalize();
+  });
+  scene.add(fig.root); figures.push(fig);
+  return fig;
+}
+function removeFigure(fig){
+  scene.remove(fig.root);
+  fig.pick.forEach(m=>m.geometry.dispose());
+  fig.mat.dispose(); fig.matSel.dispose(); fig.ring.material.dispose();
+  const i=figures.indexOf(fig); if(i>=0) figures.splice(i,1);
+}
+const r4=v=>Math.round(v*1e4)/1e4;
+function figData(f){
+  const pose={};
+  BONES.forEach(b=>{ pose[b[0]]=f.bones[b[0]].quaternion.toArray().map(r4); });
+  return {id:f.id, name:f.name, color:f.color,
+    root:{x:r4(f.root.position.x), z:r4(f.root.position.z), ry:r4(f.root.rotation.y)},
+    hips:f.bones.hips.position.toArray().map(r4), pose:pose};
+}
+function sceneData(){ return {version:1, figures:figures.map(figData)}; }
+function loadScene(data){
+  if(!data || !Array.isArray(data.figures)) throw new Error('Expected an object with a "figures" list.');
+  select(null);
+  figures.slice().forEach(removeFigure);
+  data.figures.forEach(d=>createFigure(d||{}));
+  counter=Math.max(counter, figures.length);
+  setActive(figures[0]||null);
+}
+function save(){
+  try{ localStorage.setItem('posetool.v1', JSON.stringify(sceneData())); }catch(e){}
+}
+function pushUndo(){
+  undoStack.push(JSON.stringify(sceneData()));
+  if(undoStack.length>60) undoStack.shift();
+  $('undo').disabled=false;
+}
+function undo(){
+  const s=undoStack.pop(); if(!s) return;
+  const keep=active ? active.id : null;
+  loadScene(JSON.parse(s));
+  const f=figures.find(x=>x.id===keep); if(f) setActive(f);
+  $('undo').disabled=undoStack.length===0; save();
+}
+
+// ---------- Selection ----------
+function setActive(fig){
+  active=fig||null;
+  if(sel && sel.fig!==active) select(null);
+  renderList();
+  $('dup').disabled=$('reset').disabled=$('floor').disabled=!active;
+}
+function highlight(){
+  figures.forEach(f=>BONES.forEach(b=>{
+    const on= sel && sel.fig===f && sel.kind==='bone' && sel.key===b[0];
+    f.meshes[b[0]].forEach(m=>{ m.material= on ? f.matSel : f.mat; });
+  }));
+}
+function select(s){
+  sel=s; tc.detach(); tc.showX=tc.showY=tc.showZ=true;
+  if(s){
+    const f=s.fig;
+    if(s.kind==='bone'){ tc.setMode('rotate'); tc.setSpace('local'); tc.attach(f.bones[s.key]); }
+    else if(s.kind==='ik'){ placeHandles(true); tc.setMode('translate'); tc.setSpace('world'); tc.attach(handles[s.key]); }
+    else if(s.kind==='hips'){
+      if(mode==='move'){ placeHandles(true); tc.setMode('translate'); tc.setSpace('world'); tc.attach(handles.hips); }
+      else { tc.setMode('rotate'); tc.setSpace('local'); tc.attach(f.bones.hips); }
+    }
+    else if(s.kind==='base'){
+      if(mode==='move'){ tc.setMode('translate'); tc.setSpace('world'); tc.showY=false; }
+      else { tc.setMode('rotate'); tc.setSpace('local'); tc.showX=false; tc.showZ=false; }
+      tc.attach(f.root);
+    }
+  }
+  highlight(); hint();
+}
+function hint(){
+  let t='Click a body part to rotate it. Drag the yellow handles to move hands, feet and hips. Click a floor ring to move a figure.';
+  if(!figures.length) t='The scene is empty. Add a figure to start posing.';
+  else if(sel){
+    if(sel.kind==='bone') t='Rotating the '+LABEL[sel.key]+' of '+sel.fig.name+'. Drag a coloured arc.';
+    else if(sel.kind==='ik') t='Moving the '+LABEL[sel.key]+' of '+sel.fig.name+'. The limb bends to follow.';
+    else if(sel.kind==='hips') t=(mode==='move'?'Moving':'Rotating')+' the hips of '+sel.fig.name+'.';
+    else t=(mode==='move'?'Moving ':'Turning ')+sel.fig.name+' across the floor.';
+  }
+  $('hint').textContent=t;
+}
+const JOINT={leftHand:'leftHand',rightHand:'rightHand',leftFoot:'leftFoot',rightFoot:'rightFoot',hips:'hips'};
+function placeHandles(force){
+  HANDLE_KEYS.forEach(k=>{
+    const h=handles[k];
+    if(!active){ h.visible=false; return; }
+    h.visible=true;
+    if(!force && tc.dragging && tc.object===h) return;
+    active.bones[JOINT[k]].getWorldPosition(h.position);
+  });
+}
+function hintFor(f, kind){
+  const src= kind==='arm' ? f.bones.chest : f.bones.hips;
+  const v= kind==='arm' ? new V3(0,-0.35,-1) : new V3(0,0,1);
+  return v.applyQuaternion(src.getWorldQuaternion(new Q())).normalize();
+}
+function pinFeet(f){
+  if(!drag || !drag.pins) return;
+  drag.pins.forEach(p=>{
+    const L=LIMBS[p.k];
+    solveLimb(f.bones[L[0]], f.bones[L[1]], f.bones[L[2]], p.pos, hintFor(f,'leg'), p.quat);
+  });
+}
+
+tc.addEventListener('dragging-changed', e=>{
+  orbit.enabled=!e.value;
+  if(e.value){
+    pushUndo(); drag={};
+    if(!sel) return;
+    const f=sel.fig; f.root.updateMatrixWorld(true);
+    if(sel.kind==='ik') drag.endQuat=f.bones[sel.key].getWorldQuaternion(new Q());
+    const hipsMoving= sel.kind==='hips' || (sel.kind==='bone' && sel.key==='hips');
+    if(hipsMoving && $('pin').checked){
+      drag.pins=['leftFoot','rightFoot'].map(k=>({k:k,
+        pos:f.bones[k].getWorldPosition(new V3()), quat:f.bones[k].getWorldQuaternion(new Q())}));
+    }
+  } else { drag=null; save(); }
+});
+tc.addEventListener('objectChange', ()=>{
+  if(!sel) return;
+  const f=sel.fig;
+  if(sel.kind==='ik'){
+    const L=LIMBS[sel.key];
+    solveLimb(f.bones[L[0]], f.bones[L[1]], f.bones[L[2]], handles[sel.key].position, hintFor(f,L[3]), drag && drag.endQuat);
+  } else if(sel.kind==='hips'){
+    if(tc.object===handles.hips){
+      f.root.updateMatrixWorld(true);
+      f.bones.hips.position.copy(f.root.worldToLocal(handles.hips.position.clone()));
+    }
+    pinFeet(f);
+  } else if(sel.kind==='bone' && sel.key==='hips'){
+    pinFeet(f);
+  } else if(sel.kind==='base'){
+    f.root.position.y=0;
+  }
+});
+
+// Click picking (a press that does not move is a click; drags belong to the camera or the gizmo).
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+let down=null;
+dom.addEventListener('pointerdown', e=>{ down={x:e.clientX, y:e.clientY, gizmo: !!tc.object && tc.axis!==null}; });
+dom.addEventListener('pointerup', e=>{
+  if(!down) return;
+  const moved=Math.hypot(e.clientX-down.x, e.clientY-down.y), giz=down.gizmo; down=null;
+  if(moved>5 || giz) return;
+  const r=dom.getBoundingClientRect();
+  ndc.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc, camera);
+  if(active){
+    const hh=ray.intersectObjects(handleList.filter(h=>h.visible));
+    if(hh.length){
+      const k=hh[0].object.userData.handle;
+      select({fig:active, kind:k==='hips'?'hips':'ik', key:k}); return;
+    }
+  }
+  let all=[]; figures.forEach(f=>{ all=all.concat(f.pick); });
+  const hit=ray.intersectObjects(all);
+  if(hit.length){
+    const u=hit[0].object.userData;
+    if(u.fig!==active) setActive(u.fig);
+    select(u.base ? {fig:u.fig, kind:'base'} : {fig:u.fig, kind:'bone', key:u.bone});
+  } else select(null);
+});
+
+// ---------- Panel ----------
+function renderList(){
+  const ul=$('figs'); ul.textContent='';
+  figures.forEach(f=>{
+    const li=document.createElement('li');
+    const b=document.createElement('button'); b.className='pickfig'; b.setAttribute('aria-pressed', String(f===active));
+    const dot=document.createElement('span'); dot.className='dot'; dot.style.background=f.color;
+    const nm=document.createElement('span'); nm.textContent=f.name;
+    b.appendChild(dot); b.appendChild(nm);
+    b.addEventListener('click', ()=>{ setActive(f); hint(); });
+    const x=document.createElement('button'); x.className='del'; x.textContent='\u00d7';
+    x.setAttribute('aria-label','Delete '+f.name);
+    x.addEventListener('click', ()=>{
+      pushUndo(); if(sel && sel.fig===f) select(null);
+      removeFigure(f); setActive(active===f ? (figures[0]||null) : active); hint(); save();
+    });
+    li.appendChild(b); li.appendChild(x); ul.appendChild(li);
+  });
+}
+function nextSpot(){
+  let x=0; while(figures.some(f=>Math.abs(f.root.position.x-x)<0.5 && Math.abs(f.root.position.z)<0.5)) x+=0.8;
+  return x;
+}
+$('add').addEventListener('click', ()=>{
+  pushUndo(); counter++;
+  const f=createFigure({name:'Figure '+counter, color:PALETTE[(counter-1)%PALETTE.length], root:{x:nextSpot(), z:0, ry:0}});
+  setActive(f); hint(); save();
+});
+$('dup').addEventListener('click', ()=>{
+  if(!active) return; pushUndo(); counter++;
+  const d=figData(active); d.id=uid(); d.name='Figure '+counter; d.color=PALETTE[(counter-1)%PALETTE.length];
+  d.root.x+=0.7; d.root.z+=0.3;
+  setActive(createFigure(d)); hint(); save();
+});
+$('reset').addEventListener('click', ()=>{
+  if(!active) return; pushUndo();
+  BONES.forEach(b=>active.bones[b[0]].quaternion.set(0,0,0,1));
+  active.bones.hips.position.fromArray(REST.hips);
+  select(null); save();
+});
+$('floor').addEventListener('click', ()=>{
+  if(!active) return; pushUndo();
+  active.root.updateMatrixWorld(true);
+  const bb=new THREE.Box3().setFromObject(active.bones.hips);
+  active.bones.hips.position.y-=bb.min.y;
+  if(sel) select(sel); save();
+});
+$('undo').addEventListener('click', undo);
+function setMode(m){
+  mode=m;
+  $('modeMove').setAttribute('aria-pressed', String(m==='move'));
+  $('modeRot').setAttribute('aria-pressed', String(m==='rotate'));
+  if(sel) select(sel); else hint();
+}
+$('modeMove').addEventListener('click', ()=>setMode('move'));
+$('modeRot').addEventListener('click', ()=>setMode('rotate'));
+$('collapse').addEventListener('click', ()=>{
+  const closed=$('panel').classList.toggle('closed');
+  $('collapse').textContent=closed?'Show':'Hide';
+  $('collapse').setAttribute('aria-expanded', String(!closed));
+});
+
+function openSheet(importing){
+  $('sheet').classList.add('open'); $('jsonmsg').textContent='';
+  $('jsonApply').style.display=importing?'':'none';
+  $('jsonCopy').style.display=importing?'none':'';
+  $('sheetText').textContent=importing
+    ? 'Paste scene JSON below, then load it. This replaces the current scene.'
+    : 'Every figure, its position, and each bone rotation as a quaternion.';
+  $('json').value=importing ? '' : JSON.stringify(sceneData(), null, 1);
+  $('json').focus(); if(!importing) $('json').select();
+}
+$('export').addEventListener('click', ()=>openSheet(false));
+$('import').addEventListener('click', ()=>openSheet(true));
+$('jsonClose').addEventListener('click', ()=>$('sheet').classList.remove('open'));
+$('jsonCopy').addEventListener('click', ()=>{
+  $('json').select();
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  $('jsonmsg').textContent= ok ? 'Copied.' : 'Copy did not work here. The text is selected, so copy it with your keyboard.';
+});
+$('jsonApply').addEventListener('click', ()=>{
+  let data;
+  try{ data=JSON.parse($('json').value); }
+  catch(e){ $('jsonmsg').textContent='That text is not valid JSON. Check for a missing bracket or comma.'; return; }
+  const before=JSON.stringify(sceneData());
+  try{ loadScene(data); }
+  catch(e){ loadScene(JSON.parse(before)); $('jsonmsg').textContent='Could not load that scene. '+e.message; return; }
+  undoStack.push(before); $('undo').disabled=false;
+  save(); hint(); $('sheet').classList.remove('open');
+});
+window.addEventListener('keydown', e=>{
+  const typing=/^(TEXTAREA|INPUT)$/.test((e.target&&e.target.tagName)||'');
+  if(e.key==='Escape'){ if($('sheet').classList.contains('open')) $('sheet').classList.remove('open'); else select(null); }
+  else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z' && !typing){ e.preventDefault(); undo(); }
+});
+
+// ---------- Start ----------
+function resize(){
+  const w=stage.clientWidth||1, h=stage.clientHeight||1;
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+if(window.ResizeObserver) new ResizeObserver(resize).observe(stage); else window.addEventListener('resize', resize);
+resize(); applyTheme();
+if(window.matchMedia){
+  const mq=window.matchMedia('(prefers-color-scheme: dark)');
+  if(mq.addEventListener) mq.addEventListener('change', applyTheme); else if(mq.addListener) mq.addListener(applyTheme);
+}
+if(window.MutationObserver) new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+let restored=false;
+try{
+  const raw=localStorage.getItem('posetool.v1');
+  if(raw){ const d=JSON.parse(raw); if(d && Array.isArray(d.figures) && d.figures.length){ loadScene(d); restored=true; } }
+}catch(e){ figures.slice().forEach(removeFigure); }
+if(!restored){
+  counter=1;
+  setActive(createFigure({name:'Figure 1', color:PALETTE[0], root:{x:0,z:0,ry:0}}));
+}
+$('undo').disabled=true; hint();
+
+(function loop(){
+  requestAnimationFrame(loop);
+  orbit.update(); placeHandles(false);
+  renderer.render(scene, camera);
+})();
+})();
+</script>
+</body>
+</html>
