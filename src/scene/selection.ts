@@ -1,8 +1,10 @@
 // What is selected, the IK handles, how the gizmo attaches, and click picking.
-import { BoxGeometry, Mesh, MeshBasicMaterial, SphereGeometry, type Color, type Raycaster, type Scene } from 'three';
+import {
+  BoxGeometry, Mesh, MeshBasicMaterial, SphereGeometry, type Color, type Object3D, type Raycaster, type Scene,
+} from 'three';
 import type { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { LABEL, type BoneName, type LimbEnd } from '../rig/skeleton';
-import { pickData, type Figure } from './figure';
+import type { Figure } from './figure';
 
 export type Mode = 'move' | 'rotate';
 
@@ -76,10 +78,17 @@ export function pickAt(ray: Raycaster, active: Figure | null, handles: Handles, 
       return k === 'hips' ? { fig: active, kind: 'hips', key: 'hips' } : { fig: active, kind: 'ik', key: k };
     }
   }
-  const hit = ray.intersectObjects(figures.flatMap(f => f.pick));
-  if (!hit.length) return null;
-  const u = pickData(hit[0].object);
-  return u.base ? { fig: u.fig, kind: 'base' } : { fig: u.fig, kind: 'bone', key: u.bone! };
+  const owner = new Map<Object3D, Figure>();
+  for (const f of figures) {
+    owner.set(f.ring, f);
+    f.body.pickables.forEach(o => owner.set(o, f));
+  }
+  const hit = ray.intersectObjects([...owner.keys()], false)[0];
+  if (!hit) return null;
+  const fig = owner.get(hit.object)!;
+  if (hit.object === fig.ring) return { fig, kind: 'base' };
+  const bone = fig.body.boneAt(hit);
+  return bone ? { fig, kind: 'bone', key: bone } : null;
 }
 
 export function hintText(sel: Selection | null, mode: Mode, figureCount: number): string {

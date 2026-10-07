@@ -3,9 +3,12 @@
 // SceneData JSON on demand, exactly as in the prototype.
 import { Box3, Quaternion, Raycaster, Vector2, Vector3 } from 'three';
 import { solveLimb } from '../rig/ik';
-import { BONES, LIMBS, PALETTE, REST, type LimbEnd, type LimbKind } from '../rig/skeleton';
-import { createFigure, disposeFigure, figData, uid, type Figure } from './figure';
-import { STORAGE_KEY, type FigureInput, type SceneData } from './sceneData';
+import { DEFAULT_MODEL_ID, ModelLibrary, type ModelInfo } from '../rig/models';
+import { BONES, LIMBS, PALETTE, type LimbEnd, type LimbKind } from '../rig/skeleton';
+import { createFigure, disposeFigure, figData, refreshBody, uid, type Figure } from './figure';
+import {
+  LEGACY_STORAGE_KEY, STORAGE_KEY, migrateScene, type FigureInput, type SceneData,
+} from './sceneData';
 import { Handles, attachGizmo, hintText, pickAt, type Mode, type Selection } from './selection';
 import { Stage } from './stage';
 
@@ -14,6 +17,9 @@ export interface FigureSummary { id: string; name: string; color: string }
 export interface EditorUi {
   figures: FigureSummary[];
   activeId: string | null;
+  /** Model the active figure asks for. */
+  activeModel: string | null;
+  models: ModelInfo[];
   mode: Mode;
   pinFeet: boolean;
   canUndo: boolean;
@@ -30,6 +36,7 @@ const UNDO_LIMIT = 60;
 export class Editor {
   private stage: Stage;
   private handles: Handles;
+  private models: ModelLibrary;
   private figures: Figure[] = [];
   private active: Figure | null = null;
   private sel: Selection | null = null;
@@ -51,6 +58,7 @@ export class Editor {
     this.stage = new Stage(container);
     this.handles = new Handles(this.stage.scene);
     this.stage.onTheme(c => this.handles.setColor(c.handle));
+    this.models = new ModelLibrary(() => this.onModelsChanged());
     this.ui = this.buildUi();
 
     const tc = this.stage.tc;
@@ -66,7 +74,7 @@ export class Editor {
 
     let restored = false;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
       if (raw) {
         const d = JSON.parse(raw);
         if (d && Array.isArray(d.figures) && d.figures.length) { this.loadScene(d); restored = true; }
@@ -76,12 +84,15 @@ export class Editor {
     }
     if (!restored) {
       this.counter = 1;
-      this.setActive(this.addToScene({ name: 'Figure 1', color: PALETTE[0], root: { x: 0, z: 0, ry: 0 } }));
+      this.setActive(this.addToScene({ name: 'Figure 1', color: PALETTE[0], model: DEFAULT_MODEL_ID, root: { x: 0, z: 0, ry: 0 } }));
     }
     this.undoStack = [];
     this.emit();
 
-    this.stage.start(() => this.handles.place(this.active, tc, false));
+    this.stage.start(() => {
+      this.figures.forEach(f => f.body.update());
+      this.handles.place(this.active, tc, false);
+    });
   }
 
   dispose(): void {
@@ -106,6 +117,8 @@ export class Editor {
     return {
       figures: this.figures.map(f => ({ id: f.id, name: f.name, color: f.color })),
       activeId: this.active?.id ?? null,
+      activeModel: this.active?.modelId ?? null,
+      models: this.models.list(),
       mode: this.mode,
       pinFeet: this.pinFeet,
       canUndo: this.undoStack.length > 0,
@@ -121,7 +134,7 @@ export class Editor {
   // ---------- Scene state ----------
 
   private addToScene(d: FigureInput): Figure {
-    const fig = createFigure(d);
+    const fig = createFigure(d, this.models);
     this.stage.scene.add(fig.root);
     this.figures.push(fig);
     return fig;
@@ -134,10 +147,11 @@ export class Editor {
   }
 
   sceneData(): SceneData {
-    return { version: 1, figures: this.figures.map(figData) };
+    return { version: 2, figures: this.figures.map(figData) };
   }
 
   private loadScene(data: unknown): void {
+    data = migrateScene(data);
     if (!data || !Array.isArray((data as SceneData).figures)) throw new Error('Expected an object with a "figures" list.');
     this.select(null);
     this.figures.slice().forEach(f => this.removeFigure(f));
@@ -166,12 +180,14 @@ export class Editor {
 
   private highlight(): void {
     const sel = this.sel;
-    for (const f of this.figures) {
-      for (const b of BONES) {
-        const on = !!sel && sel.fig === f && sel.kind === 'bone' && sel.key === b.name;
-        f.meshes[b.name].forEach(m => { m.material = on ? f.matSel : f.mat; });
-      }
-    }
+    for (const f of this.figures) f.body.setHighlight(sel && sel.fig === f && sel.kind === 'bone' ? sel.key : null);
+  }
+
+  /** A model finished loading (or failed): give waiting figures their real body. */
+  private onModelsChanged(): void {
+    let changed = false;
+    for (const f of this.figures) changed = refreshBody(f, this.models) || changed;
+    if (changed && this.sel) this.select(this.sel); else this.emit();
   }
 
   private select(s: Selection | null): void {
@@ -276,6 +292,7 @@ export class Editor {
     this.pushUndo(); this.counter++;
     const f = this.addToScene({
       name: 'Figure ' + this.counter, color: PALETTE[(this.counter - 1) % PALETTE.length],
+      model: this.active?.modelId ?? DEFAULT_MODEL_ID,
       root: { x: this.nextSpot(), z: 0, ry: 0 },
     });
     this.setActive(f); this.save();
@@ -305,7 +322,7 @@ export class Editor {
     if (!a) return;
     this.pushUndo();
     BONES.forEach(b => a.bones[b.name].quaternion.set(0, 0, 0, 1));
-    a.bones.hips.position.fromArray(REST.hips);
+    a.bones.hips.position.fromArray(a.body.rest.hips);
     this.select(null); this.save();
   }
 
@@ -314,7 +331,8 @@ export class Editor {
     if (!a) return;
     this.pushUndo();
     a.root.updateMatrixWorld(true);
-    const bb = new Box3().setFromObject(a.bones.hips);
+    a.body.update();
+    const bb = a.body.bounds(new Box3());
     a.bones.hips.position.y -= bb.min.y;
     if (this.sel) this.select(this.sel);
     this.save();
@@ -333,6 +351,27 @@ export class Editor {
   setMode(m: Mode): void {
     this.mode = m;
     if (this.sel) this.select(this.sel); else this.emit();
+  }
+
+  /** Give the active figure another body. The pose carries over. */
+  setModel(id: string): void {
+    const a = this.active;
+    if (!a || a.modelId === id) return;
+    this.pushUndo();
+    a.modelId = id;
+    if (refreshBody(a, this.models) && this.sel) this.select(this.sel);
+    this.emit(); this.save();
+  }
+
+  /** Load a .vrm from disk and put it on the active figure. Returns an error message, or null. */
+  async loadModelFile(file: File): Promise<string | null> {
+    try {
+      const id = await this.models.addFile(file);
+      if (this.active) this.setModel(id);
+      return null;
+    } catch (e) {
+      return 'Could not load ' + file.name + '. ' + (e instanceof Error ? e.message : String(e));
+    }
   }
 
   setPinFeet(on: boolean): void {

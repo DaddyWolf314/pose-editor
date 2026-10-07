@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { MANNEQUIN_ID } from '../rig/body';
+import type { ModelInfo } from '../rig/models';
 import type { Editor } from '../scene/editor';
 import { useEditorUi } from './useEditor';
 
@@ -8,6 +10,14 @@ export function Panel({ editor, onShowJson }: Props) {
   const ui = useEditorUi(editor);
   const [closed, setClosed] = useState(false);
   const noActive = !ui.activeId;
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [fileMsg, setFileMsg] = useState('');
+
+  const pickFile = async (file: File | undefined) => {
+    if (!file) return;
+    setFileMsg('Loading ' + file.name + '\u2026');
+    setFileMsg((await editor.loadModelFile(file)) ?? '');
+  };
 
   return (
     <div id="panel" className={closed ? 'closed' : undefined}>
@@ -35,6 +45,24 @@ export function Panel({ editor, onShowJson }: Props) {
           <button onClick={() => editor.addFigure()}>Add figure</button>
           <button disabled={noActive} onClick={() => editor.duplicate()}>Duplicate</button>
         </div>
+      </div>
+
+      <div className="group">
+        <h2>Body</h2>
+        <select id="body" aria-label="Body of the selected figure" disabled={noActive}
+          value={ui.activeModel ?? MANNEQUIN_ID} onChange={e => editor.setModel(e.target.value)}>
+          <option value={MANNEQUIN_ID}>Mannequin</option>
+          {ui.models.map(m => <option key={m.id} value={m.id}>{modelLabel(m)}</option>)}
+          {ui.activeModel && ui.activeModel !== MANNEQUIN_ID && !ui.models.some(m => m.id === ui.activeModel) && (
+            <option value={ui.activeModel}>{ui.activeModel.replace(/^file:/, '')} (not loaded)</option>
+          )}
+        </select>
+        <div className="row" style={{ marginTop: 6 }}>
+          <button onClick={() => fileInput.current?.click()}>Load .vrm file</button>
+        </div>
+        <input ref={fileInput} type="file" accept=".vrm" hidden
+          onChange={e => { void pickFile(e.target.files?.[0]); e.target.value = ''; }} />
+        {fileMsg && <p className="note" role="status">{fileMsg}</p>}
       </div>
 
       <div className="group">
@@ -66,4 +94,10 @@ export function Panel({ editor, onShowJson }: Props) {
       </div>
     </div>
   );
+}
+
+function modelLabel(m: ModelInfo): string {
+  if (m.status === 'loading') return m.label + ' (loading\u2026)';
+  if (m.status === 'error') return m.label + ' (failed to load)';
+  return m.label;
 }

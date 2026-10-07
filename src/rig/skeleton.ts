@@ -32,7 +32,11 @@ export const BONES: readonly BoneDef[] = [
   { name: 'rightFoot', parent: 'rightLowerLeg', offset: [0, -0.43, 0] },
 ];
 
-export const REST = Object.fromEntries(BONES.map(b => [b.name, b.offset])) as Record<BoneName, Vec3Tuple>;
+/** Each bone's offset from its parent in the rest (T) pose, in figure-root axes. */
+export type RestOffsets = Record<BoneName, Vec3Tuple>;
+
+/** Rest offsets of the procedural mannequin. A VRM model supplies its own. */
+export const REST: RestOffsets = Object.fromEntries(BONES.map(b => [b.name, b.offset])) as RestOffsets;
 
 export type LimbEnd = 'leftHand' | 'rightHand' | 'leftFoot' | 'rightFoot';
 export type LimbKind = 'arm' | 'leg';

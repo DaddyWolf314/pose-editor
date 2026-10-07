@@ -61,3 +61,7 @@ label.check{display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointe
 #jsonmsg{min-height:1.4em;margin:6px 0;color:var(--muted)}
 #fail{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center}
 @media (max-width:560px){ #panel{width:200px} #hint{font-size:12px} }
+select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 7px;width:100%}
+select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+select:disabled{opacity:.45}
+.note{margin:6px 0 0;color:var(--muted);font-size:12px}

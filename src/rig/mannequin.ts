@@ -1,6 +1,9 @@
-// Procedural mannequin: simple primitives parented to each bone. Meshes get their material from the caller.
-import { BoxGeometry, CylinderGeometry, Mesh, SphereGeometry, Vector3 } from 'three';
-import type { BoneName, Vec3Tuple } from './skeleton';
+// Procedural mannequin: simple primitives parented to each rig bone.
+import {
+  BoxGeometry, CylinderGeometry, Mesh, MeshStandardMaterial, SphereGeometry, Vector3, type Box3, type Intersection,
+} from 'three';
+import { MANNEQUIN_ID, type Body, type RigBones } from './body';
+import { BONES, REST, type BoneName, type Vec3Tuple } from './skeleton';
 
 function cyl(r0: number, r1: number, to: Vec3Tuple): Mesh {
   const v = new Vector3(to[0], to[1], to[2]), len = v.length();
@@ -21,7 +24,7 @@ function box(size: Vec3Tuple, at: Vec3Tuple): Mesh {
   return m;
 }
 
-export function partsFor(name: BoneName): Mesh[] {
+function partsFor(name: BoneName): Mesh[] {
   const s = name.startsWith('right') ? -1 : 1;
   switch (name.replace(/^(left|right)/, '')) {
     case 'hips': return [ball(0.13, null, [1.3, 0.85, 0.95])];
@@ -37,4 +40,48 @@ export function partsFor(name: BoneName): Mesh[] {
     case 'Foot': return [ball(0.044), box([0.095, 0.06, 0.24], [0, -0.04, 0.07])];
   }
   return [];
+}
+
+/** The procedural mannequin: primitives parented straight to the rig bones. */
+export class MannequinBody implements Body {
+  readonly modelId = MANNEQUIN_ID;
+  readonly rest = REST;
+  readonly pickables: Mesh[] = [];
+  private meshes = {} as Record<BoneName, Mesh[]>;
+  private mat: MeshStandardMaterial;
+  private matSel: MeshStandardMaterial;
+
+  constructor(bones: RigBones, color: string) {
+    this.mat = new MeshStandardMaterial({ color, roughness: 0.78, metalness: 0 });
+    this.matSel = new MeshStandardMaterial({ color, roughness: 0.78, metalness: 0, emissive: 0xffb000, emissiveIntensity: 0.45 });
+    for (const def of BONES) {
+      this.meshes[def.name] = partsFor(def.name);
+      for (const m of this.meshes[def.name]) {
+        m.material = this.mat;
+        m.userData.bone = def.name;
+        bones[def.name].add(m); this.pickables.push(m);
+      }
+    }
+  }
+
+  boneAt(hit: Intersection): BoneName | null {
+    return (hit.object.userData.bone as BoneName | undefined) ?? null;
+  }
+
+  setHighlight(bone: BoneName | null): void {
+    for (const def of BONES) this.meshes[def.name].forEach(m => { m.material = def.name === bone ? this.matSel : this.mat; });
+  }
+
+  update(): void {}
+
+  bounds(target: Box3): Box3 {
+    target.makeEmpty();
+    this.pickables.forEach(m => target.expandByObject(m));
+    return target;
+  }
+
+  dispose(): void {
+    this.pickables.forEach(m => { m.removeFromParent(); m.geometry.dispose(); });
+    this.mat.dispose(); this.matSel.dispose();
+  }
 }
