@@ -17,6 +17,8 @@ export interface Figure {
   bones: RigBones;
   body: Body;
   ring: Mesh<RingGeometry, MeshBasicMaterial>;
+  /** Look target in figure-root space, or null when the head is posed by hand. */
+  look: Vector3 | null;
 }
 
 export function uid(): string {
@@ -53,7 +55,8 @@ export function createFigure(d: FigureInput, models: ModelLibrary): Figure {
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.004;
   root.add(ring);
 
-  const fig = { id: d.id || uid(), name: d.name || 'Figure', color, modelId: d.model || MANNEQUIN_ID, root, bones, ring } as Figure;
+  const fig = { id: d.id || uid(), name: d.name || 'Figure', color, modelId: d.model || MANNEQUIN_ID, root, bones, ring, look: null } as Figure;
+  if (Array.isArray(d.look) && d.look.length === 3) fig.look = new Vector3().fromArray(d.look.map(Number));
   fig.body = makeBody(fig, models);
 
   const off = new Vector3();
@@ -91,10 +94,12 @@ const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 export function figData(f: Figure): FigureData {
   const pose: FigureData['pose'] = {};
   for (const b of BONES) pose[b.name] = f.bones[b.name].quaternion.toArray().map(r4) as QuatTuple;
-  return {
+  const d: FigureData = {
     id: f.id, name: f.name, color: f.color, model: f.modelId,
     root: { x: r4(f.root.position.x), z: r4(f.root.position.z), ry: r4(f.root.rotation.y) },
     hips: hipsOffset(f).toArray().map(r4) as FigureData['hips'],
     pose,
   };
+  if (f.look) d.look = f.look.toArray().map(r4) as FigureData['look'];
+  return d;
 }

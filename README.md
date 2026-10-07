@@ -15,7 +15,9 @@ npm run build    # type-check and production build
 ## Using it
 
 - **Click a body part** to rotate it with the gizmo.
-- **Drag the yellow handles** on the hands and feet; the limb bends to follow. The hips handle moves or rotates the hips. With "Keep feet planted" ticked, the feet stay put.
+- **Drag the yellow handles** on the hands and feet; the limb bends to follow. The hips handle moves or rotates the hips. With "Keep feet planted" ticked, the feet stay put. The diamond at the base of the neck bends the spine.
+- **Joint limits** keep elbows, knees and the other joints in a natural range; untick it for free posing.
+- **Head follows a look target** adds a wireframe target the head turns toward.
 - **Click a floor ring** to move or turn a whole figure.
 - **Figures panel**: add, duplicate, delete and select figures. **Body** picks the mannequin, a bundled model, or a `.vrm` loaded from disk.
 - **Undo**: Ctrl/Cmd+Z. **Esc**: deselect.

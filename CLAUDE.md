@@ -9,6 +9,7 @@
 - `VrmBody` drives three-vrm's *normalized* bones. VRM 0.x scenes are rotated 180° about Y, so rig rotations are conjugated into model axes (`r⁻¹·q·r`). Each figure gets a `SkeletonUtils.clone` of a loaded template with a fresh `VRMHumanoid`; geometry, materials and textures are shared, so only the cloned skeletons are disposed.
 - Scene state is three.js objects, serialized on demand to `SceneData` (`src/scene/sceneData.ts`, version 2). Undo is a stack of those JSON snapshots. `hips` is an offset from the body's rest hips position, so a pose survives a body swap. Bump the version and extend `migrateScene` when changing the format.
 - `src/rig/ik.ts` between `IK-BEGIN` and `IK-END` is the prototype's numerically tested solver. Keep that block verbatim; add new solvers or constraints outside it.
+- Joint limits (`src/rig/limits.ts`) are swing/twist ranges per bone in rig axes, defined for the left side and mirrored. With limits on, every limb solve runs `settleLimb` (`src/rig/chains.ts`) after `solveLimb`. It aligns the hinge, picks the limb swivel, then clamps. Gizmo rotations clamp the rotated bone. The chest handle (`solveSpine`) and look target (`aimHead`, applied every frame) clamp as they go. With "Joint limits" off, limbs behave exactly like the prototype.
 
 ## Conventions and gotchas
 

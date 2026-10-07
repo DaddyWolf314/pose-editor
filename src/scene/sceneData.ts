@@ -16,6 +16,8 @@ export interface FigureData {
   hips: [number, number, number];
   /** Rotation of each rig bone relative to the T-pose. */
   pose: Partial<Record<BoneName, QuatTuple>>;
+  /** Point the head looks at, in figure-root space. Absent when the head is posed by hand. */
+  look?: [number, number, number];
 }
 
 export interface SceneData {

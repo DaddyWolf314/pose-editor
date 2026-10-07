@@ -2,7 +2,9 @@
 // read-only UI snapshot for React. Scene state lives in three.js objects and is serialized to
 // SceneData JSON on demand, exactly as in the prototype.
 import { Box3, Quaternion, Raycaster, Vector2, Vector3 } from 'three';
+import { aimHead, settleLimb, solveSpine } from '../rig/chains';
 import { solveLimb } from '../rig/ik';
+import { clampBone } from '../rig/limits';
 import { DEFAULT_MODEL_ID, ModelLibrary, type ModelInfo } from '../rig/models';
 import { BONES, LIMBS, PALETTE, type LimbEnd, type LimbKind } from '../rig/skeleton';
 import { createFigure, disposeFigure, figData, refreshBody, uid, type Figure } from './figure';
@@ -22,6 +24,9 @@ export interface EditorUi {
   models: ModelInfo[];
   mode: Mode;
   pinFeet: boolean;
+  limits: boolean;
+  /** Whether the active figure's head follows a look target. */
+  activeLook: boolean;
   canUndo: boolean;
   hint: string;
 }
@@ -42,6 +47,7 @@ export class Editor {
   private sel: Selection | null = null;
   private mode: Mode = 'move';
   private pinFeet = true;
+  private limits = true;
   private drag: Drag | null = null;
   private counter = 0;
   private undoStack: string[] = [];
@@ -90,7 +96,13 @@ export class Editor {
     this.emit();
 
     this.stage.start(() => {
-      this.figures.forEach(f => f.body.update());
+      for (const f of this.figures) {
+        if (f.look) {
+          f.root.updateMatrixWorld(true);
+          aimHead(f.bones, f.look.clone().applyMatrix4(f.root.matrixWorld), this.limits);
+        }
+        f.body.update();
+      }
       this.handles.place(this.active, tc, false);
     });
   }
@@ -121,6 +133,8 @@ export class Editor {
       models: this.models.list(),
       mode: this.mode,
       pinFeet: this.pinFeet,
+      limits: this.limits,
+      activeLook: !!this.active?.look,
       canUndo: this.undoStack.length > 0,
       hint: hintText(this.sel, this.mode, this.figures.length),
     };
@@ -205,12 +219,18 @@ export class Editor {
     return v.applyQuaternion(src.getWorldQuaternion(new Quaternion())).normalize();
   }
 
+  /** Two-bone IK toward `target`, then joint limits. `endQuat` is the end bone's world rotation to keep. */
+  private reach(f: Figure, k: LimbEnd, target: Vector3, endQuat?: Quaternion | null): void {
+    const L = LIMBS[k];
+    const keep = endQuat ?? f.bones[L.end].getWorldQuaternion(new Quaternion());
+    const hint = this.hintFor(f, L.kind);
+    solveLimb(f.bones[L.upper], f.bones[L.lower], f.bones[L.end], target, hint, endQuat);
+    if (this.limits) settleLimb(f.bones, L, keep, hint);
+  }
+
   private pinFeetOf(f: Figure): void {
     if (!this.drag || !this.drag.pins) return;
-    for (const p of this.drag.pins) {
-      const L = LIMBS[p.k];
-      solveLimb(f.bones[L.upper], f.bones[L.lower], f.bones[L.end], p.pos, this.hintFor(f, 'leg'), p.quat);
-    }
+    for (const p of this.drag.pins) this.reach(f, p.k, p.pos, p.quat);
   }
 
   // ---------- Gizmo events ----------
@@ -237,9 +257,14 @@ export class Editor {
     if (!sel) return;
     const f = sel.fig;
     if (sel.kind === 'ik') {
-      const L = LIMBS[sel.key];
-      solveLimb(f.bones[L.upper], f.bones[L.lower], f.bones[L.end], this.handles.meshes[sel.key].position,
-        this.hintFor(f, L.kind), this.drag && this.drag.endQuat);
+      this.reach(f, sel.key, this.handles.meshes[sel.key].position, this.drag && this.drag.endQuat);
+    } else if (sel.kind === 'chest') {
+      solveSpine(f.bones, this.handles.meshes.chest.position, this.limits);
+    } else if (sel.kind === 'look') {
+      f.root.updateMatrixWorld(true);
+      f.look = f.root.worldToLocal(this.handles.meshes.look.position.clone());
+    } else if (sel.kind === 'bone' && sel.key !== 'hips') {
+      if (this.limits) clampBone(f.bones[sel.key], sel.key);
     } else if (sel.kind === 'hips') {
       if (this.stage.tc.object === this.handles.meshes.hips) {
         f.root.updateMatrixWorld(true);
@@ -377,6 +402,29 @@ export class Editor {
   setPinFeet(on: boolean): void {
     this.pinFeet = on;
     this.emit();
+  }
+
+  /** Joint limits apply to every later solve and rotation; existing poses are left as they are. */
+  setLimits(on: boolean): void {
+    this.limits = on;
+    this.emit();
+  }
+
+  /** Make the active figure's head follow a look target, placed where it is looking now. */
+  setLook(on: boolean): void {
+    const a = this.active;
+    if (!a || !!a.look === on) return;
+    this.pushUndo();
+    if (on) {
+      a.root.updateMatrixWorld(true);
+      const head = a.bones.head;
+      const p = new Vector3(0, 0.08, 0.8).applyQuaternion(head.getWorldQuaternion(new Quaternion())).add(head.getWorldPosition(new Vector3()));
+      a.look = a.root.worldToLocal(p);
+    } else {
+      a.look = null;
+      if (this.sel?.fig === a && this.sel.kind === 'look') this.select(null);
+    }
+    this.emit(); this.save();
   }
 
   sceneJson(): string {

@@ -83,6 +83,12 @@ export function Panel({ editor, onShowJson }: Props) {
           <button disabled={noActive} onClick={() => editor.dropToFloor()}>Drop to floor</button>
           <button disabled={!ui.canUndo} onClick={() => editor.undo()}>Undo</button>
         </div>
+        <label className="check">
+          <input type="checkbox" checked={ui.limits} onChange={e => editor.setLimits(e.target.checked)} /> Joint limits
+        </label>
+        <label className="check">
+          <input type="checkbox" disabled={noActive} checked={ui.activeLook} onChange={e => editor.setLook(e.target.checked)} /> Head follows a look target
+        </label>
       </div>
 
       <div className="group">
