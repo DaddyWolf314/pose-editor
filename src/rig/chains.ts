@@ -4,9 +4,16 @@ import { Matrix4, Quaternion, Vector3 } from 'three';
 import type { RigBones } from './body';
 import { setWorldQuat } from './ik';
 import { clampBone, hingeAxis, twistAbout } from './limits';
-import type { Limb } from './skeleton';
+import type { Limb, LimbKind } from './skeleton';
 
 const X = new Vector3(1, 0, 0);
+
+/** Where a limb's middle joint should point: elbows back and down, knees forward. World space. */
+export function poleFor(bones: RigBones, kind: LimbKind): Vector3 {
+  const src = kind === 'arm' ? bones.chest : bones.hips;
+  const v = kind === 'arm' ? new Vector3(0, -0.35, -1) : new Vector3(0, 0, 1);
+  return v.applyQuaternion(src.getWorldQuaternion(new Quaternion())).normalize();
+}
 
 /**
  * After `solveLimb`, make the limb anatomical. The IK keeps whichever way the limb was bent, which from

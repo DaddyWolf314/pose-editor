@@ -11,6 +11,7 @@ export function Panel({ editor, onShowJson }: Props) {
   const [closed, setClosed] = useState(false);
   const noActive = !ui.activeId;
   const fileInput = useRef<HTMLInputElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
   const [fileMsg, setFileMsg] = useState('');
 
   const pickFile = async (file: File | undefined) => {
@@ -89,6 +90,29 @@ export function Panel({ editor, onShowJson }: Props) {
         <label className="check">
           <input type="checkbox" disabled={noActive} checked={ui.activeLook} onChange={e => editor.setLook(e.target.checked)} /> Head follows a look target
         </label>
+      </div>
+
+      <div className="group">
+        <h2>Photo</h2>
+        <div className="row">
+          <button disabled={ui.photo.busy} onClick={() => photoInput.current?.click()}>
+            {ui.photo.busy ? 'Working\u2026' : 'Pose from photo'}
+          </button>
+        </div>
+        <input ref={photoInput} type="file" accept="image/*" hidden
+          onChange={e => { const f = e.target.files?.[0]; if (f) void editor.importPhoto(f); e.target.value = ''; }} />
+        {ui.photo.loaded && (
+          <>
+            <label className="check">
+              <input type="checkbox" checked={ui.photo.visible} onChange={e => editor.setPhotoVisible(e.target.checked)} /> Show photo
+            </label>
+            <div className="row" style={{ marginTop: 6 }}>
+              <button onClick={() => editor.viewFromPhoto()}>View from photo</button>
+              <button onClick={() => editor.removePhoto()}>Remove photo</button>
+            </div>
+          </>
+        )}
+        {ui.photo.message && <p className="note" role="status">{ui.photo.message}</p>}
       </div>
 
       <div className="group">

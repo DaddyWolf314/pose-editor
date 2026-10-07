@@ -2,11 +2,12 @@
 // read-only UI snapshot for React. Scene state lives in three.js objects and is serialized to
 // SceneData JSON on demand, exactly as in the prototype.
 import { Box3, Quaternion, Raycaster, Vector2, Vector3 } from 'three';
-import { aimHead, settleLimb, solveSpine } from '../rig/chains';
+import { aimHead, poleFor, settleLimb, solveSpine } from '../rig/chains';
 import { solveLimb } from '../rig/ik';
 import { clampBone } from '../rig/limits';
+import type { PhotoCamera, PoseEstimator } from '../pose/estimator';
 import { DEFAULT_MODEL_ID, ModelLibrary, type ModelInfo } from '../rig/models';
-import { BONES, LIMBS, PALETTE, type LimbEnd, type LimbKind } from '../rig/skeleton';
+import { BONES, LIMBS, PALETTE, type LimbEnd } from '../rig/skeleton';
 import { createFigure, disposeFigure, figData, refreshBody, uid, type Figure } from './figure';
 import {
   LEGACY_STORAGE_KEY, STORAGE_KEY, migrateScene, type FigureInput, type SceneData,
@@ -29,6 +30,7 @@ export interface EditorUi {
   activeLook: boolean;
   canUndo: boolean;
   hint: string;
+  photo: { busy: boolean; loaded: boolean; visible: boolean; message: string };
 }
 
 interface Drag {
@@ -51,6 +53,10 @@ export class Editor {
   private drag: Drag | null = null;
   private counter = 0;
   private undoStack: string[] = [];
+  private estimator: Promise<PoseEstimator> | null = null;
+  private photo: { url: string; camera: PhotoCamera } | null = null;
+  private photoUi: EditorUi['photo'] = { busy: false, loaded: false, visible: true, message: '' };
+  private disposed = false;
 
   private ray = new Raycaster();
   private ndc = new Vector2();
@@ -108,7 +114,10 @@ export class Editor {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.cleanup.forEach(fn => fn());
+    this.estimator?.then(e => e.dispose(), () => {});
+    if (this.photo) URL.revokeObjectURL(this.photo.url);
     this.figures.forEach(disposeFigure);
     this.figures = [];
     this.handles.dispose();
@@ -137,6 +146,7 @@ export class Editor {
       activeLook: !!this.active?.look,
       canUndo: this.undoStack.length > 0,
       hint: hintText(this.sel, this.mode, this.figures.length),
+      photo: this.photoUi,
     };
   }
 
@@ -213,17 +223,11 @@ export class Editor {
     this.emit();
   }
 
-  private hintFor(f: Figure, kind: LimbKind): Vector3 {
-    const src = kind === 'arm' ? f.bones.chest : f.bones.hips;
-    const v = kind === 'arm' ? new Vector3(0, -0.35, -1) : new Vector3(0, 0, 1);
-    return v.applyQuaternion(src.getWorldQuaternion(new Quaternion())).normalize();
-  }
-
   /** Two-bone IK toward `target`, then joint limits. `endQuat` is the end bone's world rotation to keep. */
   private reach(f: Figure, k: LimbEnd, target: Vector3, endQuat?: Quaternion | null): void {
     const L = LIMBS[k];
     const keep = endQuat ?? f.bones[L.end].getWorldQuaternion(new Quaternion());
-    const hint = this.hintFor(f, L.kind);
+    const hint = poleFor(f.bones, L.kind);
     solveLimb(f.bones[L.upper], f.bones[L.lower], f.bones[L.end], target, hint, endQuat);
     if (this.limits) settleLimb(f.bones, L, keep, hint);
   }
@@ -425,6 +429,79 @@ export class Editor {
       if (this.sel?.fig === a && this.sel.kind === 'look') this.select(null);
     }
     this.emit(); this.save();
+  }
+
+  // ---------- Photo import ----------
+
+  private setPhotoUi(patch: Partial<EditorUi['photo']>): void {
+    this.photoUi = { ...this.photoUi, ...patch };
+    this.emit();
+  }
+
+  /** Detect the people in a photo and replace the scene with one figure per person, posed to match. */
+  async importPhoto(file: File): Promise<void> {
+    if (this.photoUi.busy) return;
+    const url = URL.createObjectURL(file);
+    try {
+      this.setPhotoUi({ busy: true, message: 'Loading the pose detector\u2026' });
+      // MediaPipe is loaded on first use only.
+      this.estimator ??= import('../pose/mediapipe').then(m => m.MediaPipeEstimator.create());
+      this.estimator.catch(() => { this.estimator = null; });
+      const image = new Image();
+      image.src = url;
+      const [estimator] = await Promise.all([this.estimator, image.decode()]);
+      if (this.disposed) return;
+      this.setPhotoUi({ message: 'Finding people\u2026' });
+      const est = await estimator.estimate(image);
+      if (this.disposed) return;
+      if (!est.people.length) {
+        URL.revokeObjectURL(url);
+        this.setPhotoUi({ busy: false, message: 'No people found in ' + file.name + '.' });
+        return;
+      }
+
+      this.pushUndo();
+      const model = this.active?.modelId ?? DEFAULT_MODEL_ID;
+      this.select(null);
+      this.figures.slice().forEach(f => this.removeFigure(f));
+      // Left to right as seen in the photo.
+      const people = est.people.slice().sort((a, b) => a.root.x - b.root.x);
+      people.forEach((p, i) => this.addToScene({
+        name: 'Figure ' + (i + 1), color: PALETTE[i % PALETTE.length], model, root: p.root, hips: p.hips, pose: p.pose,
+      }));
+      this.counter = Math.max(this.counter, people.length);
+      this.setActive(this.figures[0]);
+
+      if (this.photo) URL.revokeObjectURL(this.photo.url);
+      this.photo = { url, camera: est.camera };
+      this.stage.setBackdrop(image, est.camera);
+      this.stage.setBackdropVisible(this.photoUi.visible);
+      this.stage.viewFrom(est.camera);
+      const n = people.length;
+      this.setPhotoUi({ busy: false, loaded: true, message: `Found ${n} ${n === 1 ? 'person' : 'people'}. Depth and occluded limbs are guesses; correct them by eye.` });
+      this.save();
+    } catch (e) {
+      console.error(e);
+      URL.revokeObjectURL(url);
+      this.setPhotoUi({ busy: false, message: 'Could not read that photo. ' + (e instanceof Error ? e.message : String(e)) });
+    }
+  }
+
+  setPhotoVisible(on: boolean): void {
+    this.stage.setBackdropVisible(on);
+    this.setPhotoUi({ visible: on });
+  }
+
+  viewFromPhoto(): void {
+    if (this.photo) this.stage.viewFrom(this.photo.camera);
+  }
+
+  removePhoto(): void {
+    if (!this.photo) return;
+    URL.revokeObjectURL(this.photo.url);
+    this.photo = null;
+    this.stage.setBackdrop(null);
+    this.setPhotoUi({ loaded: false, message: '' });
   }
 
   sceneJson(): string {

@@ -11,10 +11,13 @@
 - `src/rig/ik.ts` between `IK-BEGIN` and `IK-END` is the prototype's numerically tested solver. Keep that block verbatim; add new solvers or constraints outside it.
 - Joint limits (`src/rig/limits.ts`) are swing/twist ranges per bone in rig axes, defined for the left side and mirrored. With limits on, every limb solve runs `settleLimb` (`src/rig/chains.ts`) after `solveLimb`. It aligns the hinge, picks the limb swivel, then clamps. Gizmo rotations clamp the rotated bone. The chest handle (`solveSpine`) and look target (`aimHead`, applied every frame) clamp as they go. With "Joint limits" off, limbs behave exactly like the prototype.
 
+- Photo import (`src/pose/`): `PoseEstimator` returns people in scene-data terms (`pose`, `root`, `hips`) plus the assumed `PhotoCamera`, so another estimator can replace MediaPipe without touching the editor. `MediaPipeEstimator` handles detection and placement (level camera, assumed field of view, distance from bone lengths, feet on the floor). `poseFromPoints` turns 3D body points into rig rotations on a bare mannequin rig, reusing `settleLimb` for twist and limits. MediaPipe loads lazily on first import.
+
 ## Conventions and gotchas
 
 - `tsconfig` has `erasableSyntaxOnly`: write explicit fields instead of constructor parameter properties, and avoid enums.
 - three.js is r186: `TransformControls` is added via `getHelper()`; lights are physically based, so prototype intensities are multiplied by π.
+- MediaPipe's WASM comes from the npm package via `?url` imports; the model file is in `public/models/`. `vite.config.ts` pre-bundles `@mediapipe/tasks-vision`, since a lazily imported dependency otherwise triggers a full page reload in dev.
 - `Stage` creates `TransformControls` before `Editor` adds its canvas pointer listeners, so `tc.axis` is current when click-picking runs. Keep that order.
 
 ## Verifying

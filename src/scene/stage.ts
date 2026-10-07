@@ -1,9 +1,11 @@
 // Renderer, camera, lights, camera orbit, gizmo, floor grid and theme. Knows nothing about figures.
 import {
-  Color, DirectionalLight, GridHelper, HemisphereLight, PerspectiveCamera, Scene, WebGLRenderer,
+  Color, DirectionalLight, GridHelper, HemisphereLight, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry,
+  SRGBColorSpace, Scene, Texture, Vector3, WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import type { PhotoCamera } from '../pose/estimator';
 
 export interface ThemeColors { stage: Color; grid: Color; handle: Color }
 
@@ -21,6 +23,7 @@ export class Stage {
   readonly tc: TransformControls;
 
   private grid: GridHelper | null = null;
+  private backdrop: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null;
   private themeListeners: ((c: ThemeColors) => void)[] = [];
   private raf = 0;
   private cleanup: (() => void)[] = [];
@@ -86,6 +89,43 @@ export class Stage {
     this.themeListeners.forEach(fn => fn(c));
   }
 
+  /**
+   * Show a photo on a plane across the view of `cam`, far enough back to sit behind every figure.
+   * Seen from `cam` (see `viewFrom`), it lines up with figures placed by the estimate.
+   */
+  setBackdrop(image: HTMLImageElement | null, cam?: PhotoCamera): void {
+    if (this.backdrop) {
+      this.backdrop.removeFromParent();
+      this.backdrop.geometry.dispose(); this.backdrop.material.map?.dispose(); this.backdrop.material.dispose();
+      this.backdrop = null;
+    }
+    if (!image || !cam) return;
+    const pos = new Vector3(...cam.position), axis = new Vector3(...cam.target).sub(pos).normalize();
+    const h = 2 * cam.backdropDistance * Math.tan((cam.fov / 2) * Math.PI / 180);
+    const tex = new Texture(image);
+    tex.colorSpace = SRGBColorSpace;
+    tex.needsUpdate = true;
+    const plane = new Mesh(new PlaneGeometry(h * cam.aspect, h), new MeshBasicMaterial({ map: tex, toneMapped: false }));
+    plane.position.copy(pos).addScaledVector(axis, cam.backdropDistance);
+    plane.lookAt(pos);
+    plane.raycast = () => {};
+    this.scene.add(plane);
+    this.backdrop = plane;
+  }
+
+  setBackdropVisible(on: boolean): void {
+    if (this.backdrop) this.backdrop.visible = on;
+  }
+
+  /** Put the camera where the photo was taken from. */
+  viewFrom(cam: PhotoCamera): void {
+    this.camera.position.set(...cam.position);
+    this.camera.fov = cam.fov;
+    this.camera.updateProjectionMatrix();
+    this.orbit.target.set(...cam.target);
+    this.orbit.update();
+  }
+
   start(frame: () => void): void {
     const loop = () => {
       this.raf = requestAnimationFrame(loop);
@@ -100,6 +140,7 @@ export class Stage {
     this.cleanup.forEach(fn => fn());
     this.tc.detach(); this.tc.dispose(); this.orbit.dispose();
     this.grid?.dispose();
+    this.setBackdrop(null);
     this.renderer.dispose();
     this.dom.remove();
   }

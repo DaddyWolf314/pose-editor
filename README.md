@@ -20,6 +20,7 @@ npm run build    # type-check and production build
 - **Head follows a look target** adds a wireframe target the head turns toward.
 - **Click a floor ring** to move or turn a whole figure.
 - **Figures panel**: add, duplicate, delete and select figures. **Body** picks the mannequin, a bundled model, or a `.vrm` loaded from disk.
+- **Pose from photo** detects the people in a photo (MediaPipe Pose Landmarker, in the browser) and replaces the scene with one posed figure each. The photo appears as a backdrop that lines up with the figures from the photo's camera; **View from photo** returns there after orbiting. Distances between people, limbs pointing at the camera, and hidden limbs are guesses to correct by eye. The photo is not saved with the scene.
 - **Undo**: Ctrl/Cmd+Z. **Esc**: deselect.
 - **Scene JSON**: export or paste the whole scene (figures, positions, and one quaternion per bone).
 
@@ -30,3 +31,5 @@ npm run build    # type-check and production build
 The bundled VRM models in `public/models/` (`Base_Female.vrm`, `Base_Male.vrm`) are the VRoid Studio CC0 models from OpenGameArt: <https://opengameart.org/content/vroid-studio-cc0-models>.
 
 To add another bundled model, put the `.vrm` in `public/models/` and add an entry to `BUILTIN` in `src/rig/models.ts`.
+
+`public/models/pose_landmarker_heavy.task` is MediaPipe's Pose Landmarker (heavy) model from <https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker>, under the Apache 2.0 licence.
