@@ -11,7 +11,7 @@
 - `src/rig/ik.ts` between `IK-BEGIN` and `IK-END` is the prototype's numerically tested solver. Keep that block verbatim; add new solvers or constraints outside it.
 - Joint limits (`src/rig/limits.ts`) are swing/twist ranges per bone in rig axes, defined for the left side and mirrored. With limits on, every limb solve runs `settleLimb` (`src/rig/chains.ts`) after `solveLimb`. It aligns the hinge, picks the limb swivel, then clamps. Gizmo rotations clamp the rotated bone. The chest handle (`solveSpine`) and look target (`aimHead`, applied every frame) clamp as they go. With "Joint limits" off, limbs behave exactly like the prototype.
 
-- Props (`src/props/`): `catalog.ts` defines each kind as size parameters plus a function returning axis-aligned boxes in prop space (origin on the floor, front facing +Z); the same boxes are meant to drive rendering and collision. All props share one unit `BoxGeometry` and one theme-coloured material (`PropKit`), so disposing a prop only detaches it. A selection is either a figure selection or `{ kind: 'prop' }`; selecting a prop leaves the active figure alone.
+- Props (`src/props/`): `catalog.ts` defines each kind as size parameters plus a function returning axis-aligned boxes in prop space (origin on the floor, front facing +Z); the same boxes are meant to drive rendering and collision. All props share one unit `BoxGeometry` and one theme-coloured material (`PropKit`), so disposing a prop only detaches it. A selection is either a figure selection or `{ kind: 'prop' }`; selecting a prop leaves the active figure alone. `collide.ts` is the collision core: signed distances to solid boxes and the floor, sphere push-out, support height and capsule depth. It imports nothing relative so Node can run its tests directly.
 
 - Photo import (`src/pose/`): `PoseEstimator` returns people in scene-data terms (`pose`, `root`, `hips`) plus the assumed `PhotoCamera`, so another estimator can replace MediaPipe without touching the editor. `MediaPipeEstimator` handles detection and placement (level camera, assumed field of view, distance from bone lengths, feet on the floor). `poseFromPoints` turns 3D body points into rig rotations on a bare mannequin rig, reusing `settleLimb` for twist and limits. MediaPipe loads lazily on first import.
 
@@ -24,4 +24,4 @@
 
 ## Verifying
 
-`npm run build` type-checks and builds. For behaviour, run `npm run dev` and check the change in the browser against the prototype; console errors count as failures.
+`npm run build` type-checks and builds. `npm test` runs `src/**/*.test.ts` with Node's own runner (no extra dependencies). Test files are type-checked by `tsconfig.node.json`, and must import with `.ts` extensions. For behaviour, run `npm run dev` and check the change in the browser against the prototype; console errors count as failures.
