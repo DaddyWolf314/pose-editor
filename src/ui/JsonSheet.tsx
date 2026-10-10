@@ -34,7 +34,7 @@ export function JsonSheet({ editor, importing, onClose }: Props) {
         <p id="sheetText">
           {importing
             ? 'Paste scene JSON below, then load it. This replaces the current scene.'
-            : 'Every figure, its position, and each bone rotation as a quaternion.'}
+            : 'Every figure, its position, and each bone rotation as a quaternion, plus every prop.'}
         </p>
         <textarea id="json" ref={area} spellCheck={false} aria-label="Scene JSON" value={text} onChange={e => setText(e.target.value)} />
         <div id="jsonmsg" role="status">{msg}</div>

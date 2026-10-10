@@ -4,18 +4,23 @@ import {
   type Color, type Object3D, type Raycaster, type Scene,
 } from 'three';
 import type { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import type { Prop } from '../props/prop';
 import { LABEL, type BoneName, type LimbEnd } from '../rig/skeleton';
 import type { Figure } from './figure';
 
 export type Mode = 'move' | 'rotate';
 
-export type Selection =
+export type FigureSelection =
   | { fig: Figure; kind: 'bone'; key: BoneName }
   | { fig: Figure; kind: 'ik'; key: LimbEnd }
   | { fig: Figure; kind: 'hips'; key: 'hips' }
   | { fig: Figure; kind: 'chest' }
   | { fig: Figure; kind: 'look' }
   | { fig: Figure; kind: 'base' };
+
+export interface PropSelection { kind: 'prop'; prop: Prop }
+
+export type Selection = FigureSelection | PropSelection;
 
 // Handles: one shared set, shown on the active figure. Each sits on a joint, except the look target.
 export const HANDLE_KEYS = ['leftHand', 'rightHand', 'leftFoot', 'rightFoot', 'hips', 'chest', 'look'] as const;
@@ -69,6 +74,13 @@ export class Handles {
 export function attachGizmo(tc: TransformControls, handles: Handles, s: Selection | null, mode: Mode): void {
   tc.detach(); tc.showX = tc.showY = tc.showZ = true;
   if (!s) return;
+  if (s.kind === 'prop') {
+    // Move lifts as well (Y), for stacking; rotate turns about Y only.
+    if (mode === 'move') { tc.setMode('translate'); tc.setSpace('world'); }
+    else { tc.setMode('rotate'); tc.setSpace('local'); tc.showX = false; tc.showZ = false; }
+    tc.attach(s.prop.root);
+    return;
+  }
   const f = s.fig;
   if (s.kind === 'bone') { tc.setMode('rotate'); tc.setSpace('local'); tc.attach(f.bones[s.key]); }
   else if (s.kind === 'ik') { tc.setMode('translate'); tc.setSpace('world'); tc.attach(handles.meshes[s.key]); }
@@ -86,8 +98,8 @@ export function attachGizmo(tc: TransformControls, handles: Handles, s: Selectio
   }
 }
 
-/** Handles on the active figure win; then the nearest body part or floor ring of any figure. */
-export function pickAt(ray: Raycaster, active: Figure | null, handles: Handles, figures: Figure[]): Selection | null {
+/** Handles on the active figure win; then the nearest body part, floor ring or prop. */
+export function pickAt(ray: Raycaster, active: Figure | null, handles: Handles, figures: Figure[], props: Prop[]): Selection | null {
   if (active) {
     const hh = ray.intersectObjects(handles.list.filter(h => h.visible));
     if (hh.length) {
@@ -97,22 +109,29 @@ export function pickAt(ray: Raycaster, active: Figure | null, handles: Handles, 
       return { fig: active, kind: 'ik', key: k };
     }
   }
-  const owner = new Map<Object3D, Figure>();
+  const owner = new Map<Object3D, Figure | Prop>();
   for (const f of figures) {
     owner.set(f.ring, f);
     f.body.pickables.forEach(o => owner.set(o, f));
   }
+  for (const p of props) p.meshes.forEach(m => owner.set(m, p));
   const hit = ray.intersectObjects([...owner.keys()], false)[0];
   if (!hit) return null;
-  const fig = owner.get(hit.object)!;
+  const o = owner.get(hit.object)!;
+  if (!('bones' in o)) return { kind: 'prop', prop: o };
+  const fig = o;
   if (hit.object === fig.ring) return { fig, kind: 'base' };
   const bone = fig.body.boneAt(hit);
   return bone ? { fig, kind: 'bone', key: bone } : null;
 }
 
 export function hintText(sel: Selection | null, mode: Mode, figureCount: number): string {
-  if (!figureCount) return 'The scene is empty. Add a figure to start posing.';
-  if (!sel) return 'Click a body part to rotate it. Drag the yellow handles to move hands, feet and hips. Click a floor ring to move a figure.';
+  if (sel?.kind === 'prop') {
+    const name = sel.prop.name;
+    return mode === 'move' ? 'Moving ' + name + '. Drag an arrow; the vertical one lifts it.' : 'Turning ' + name + '. Drag the arc.';
+  }
+  if (!figureCount) return 'The scene has no figures. Add a figure to start posing.';
+  if (!sel) return 'Click a body part to rotate it. Drag the yellow handles to move hands, feet and hips. Click a floor ring or a prop to move it.';
   const name = sel.fig.name;
   if (sel.kind === 'bone' && sel.fig.look && (sel.key === 'head' || sel.key === 'neck')) {
     return 'The head of ' + name + ' follows its look target. Turn the target off to rotate it by hand.';

@@ -7,7 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import type { PhotoCamera } from '../pose/estimator';
 
-export interface ThemeColors { stage: Color; grid: Color; handle: Color }
+export interface ThemeColors { stage: Color; grid: Color; handle: Color; prop: Color }
 
 function cssVar(n: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -77,6 +77,7 @@ export class Stage {
       stage: new Color(cssVar('--stage') || '#dde2e6'),
       grid: new Color(cssVar('--grid') || '#b9c2c9'),
       handle: new Color(cssVar('--handle') || '#ffb000'),
+      prop: new Color(cssVar('--prop') || '#a3acb4'),
     };
   }
 

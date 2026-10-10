@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { MANNEQUIN_ID } from '../rig/body';
+import type { PropKind } from '../props/catalog';
 import type { ModelInfo } from '../rig/models';
 import type { Editor } from '../scene/editor';
 import { useEditorUi } from './useEditor';
@@ -49,6 +50,38 @@ export function Panel({ editor, onShowJson }: Props) {
       </div>
 
       <div className="group">
+        <h2>Props</h2>
+        {ui.props.length > 0 && (
+          <ul id="props">
+            {ui.props.map(p => (
+              <li key={p.id}>
+                <button className="pickfig" aria-pressed={p.id === ui.prop?.id} onClick={() => editor.selectProp(p.id)}>
+                  <span>{p.name}</span>
+                </button>
+                <button className="del" aria-label={'Delete ' + p.name} onClick={() => editor.deleteProp(p.id)}>{'×'}</button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <select aria-label="Add a prop" value="" onChange={e => { if (e.target.value) editor.addProp(e.target.value as PropKind); }}>
+          <option value="">Add prop{'\u2026'}</option>
+          {ui.propKinds.map(k => <option key={k.kind} value={k.kind}>{k.label}</option>)}
+        </select>
+        {ui.prop && (
+          <div className="size" role="group" aria-label={'Size of ' + ui.prop.name}>
+            {ui.prop.params.map(q => (
+              <label key={q.key}>
+                <span>{q.label}</span>
+                <span>{q.value.toFixed(2)} m</span>
+                <input type="range" min={q.min} max={q.max} step={0.01} value={q.value}
+                  onChange={e => editor.setPropSize(ui.prop!.id, q.key, Number(e.target.value))} />
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="group">
         <h2>Body</h2>
         <select id="body" aria-label="Body of the selected figure" disabled={noActive}
           value={ui.activeModel ?? MANNEQUIN_ID} onChange={e => editor.setModel(e.target.value)}>
@@ -67,8 +100,8 @@ export function Panel({ editor, onShowJson }: Props) {
       </div>
 
       <div className="group">
-        <h2>Hips and floor ring</h2>
-        <div className="seg" role="group" aria-label="Hips and floor ring mode">
+        <h2>Hips, floor rings and props</h2>
+        <div className="seg" role="group" aria-label="Hips, floor ring and prop mode">
           <button aria-pressed={ui.mode === 'move'} onClick={() => editor.setMode('move')}>Move</button>
           <button aria-pressed={ui.mode === 'rotate'} onClick={() => editor.setMode('rotate')}>Rotate</button>
         </div>

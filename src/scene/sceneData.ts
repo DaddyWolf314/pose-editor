@@ -20,23 +20,44 @@ export interface FigureData {
   look?: [number, number, number];
 }
 
+export interface PropData {
+  id: string;
+  name: string;
+  /** Catalog kind (`PROP_KINDS`). Unknown kinds load as a box. */
+  kind: string;
+  /** Position (`y` lifts it, for stacking) and turn about +Y. The prop's front faces +Z. */
+  root: { x: number; y: number; z: number; ry: number };
+  /** The kind's size parameters in metres. Missing or out-of-range values take the catalog default or limit. */
+  size: Record<string, number>;
+}
+
 export interface SceneData {
-  version: 2;
+  version: 3;
   figures: FigureData[];
+  props: PropData[];
 }
 
 /** Input accepted when loading: every field is optional and checked at load time, as in the prototype. */
 export type FigureInput = Partial<FigureData>;
+export type PropInput = Partial<PropData>;
 
 export const STORAGE_KEY = 'posetool.v2';
 /** Key used by the prototype and step 2, read once if there is no v2 save. */
 export const LEGACY_STORAGE_KEY = 'posetool.v1';
 
 /**
- * Bring older scene JSON up to version 2. Version 1 (the prototype) stored absolute hips positions for
- * the procedural mannequin and had no model field.
+ * Bring older scene JSON up to version 3. Version 1 (the prototype) stored absolute hips positions for
+ * the procedural mannequin and had no model field. Version 2 had no props.
  */
 export function migrateScene(data: unknown): unknown {
+  data = migrateV1(data);
+  if (!data || typeof data !== 'object') return data;
+  const d = data as { version?: number; figures?: unknown };
+  if (d.version !== 2 || !Array.isArray(d.figures)) return data;
+  return { ...d, version: 3, props: [] };
+}
+
+function migrateV1(data: unknown): unknown {
   if (!data || typeof data !== 'object') return data;
   const d = data as { version?: number; figures?: unknown };
   if (d.version !== 1 || !Array.isArray(d.figures)) return data;
