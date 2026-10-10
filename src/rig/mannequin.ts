@@ -73,6 +73,10 @@ export class MannequinBody implements Body {
     for (const def of BONES) this.meshes[def.name].forEach(m => { m.material = def.name === bone ? this.matSel : this.mat; });
   }
 
+  setColor(color: string): void {
+    this.mat.color.set(color); this.matSel.color.set(color);
+  }
+
   update(): void {}
 
   bounds(target: Box3): Box3 {

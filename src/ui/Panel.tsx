@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { MANNEQUIN_ID } from '../rig/body';
 import type { PropKind } from '../props/catalog';
 import type { ModelInfo } from '../rig/models';
+import { COLORS } from '../rig/skeleton';
 import type { Editor } from '../scene/editor';
 import { useEditorUi } from './useEditor';
 
@@ -11,6 +12,7 @@ export function Panel({ editor, onShowJson }: Props) {
   const ui = useEditorUi(editor);
   const [closed, setClosed] = useState(false);
   const noActive = !ui.activeId;
+  const activeColor = ui.figures.find(f => f.id === ui.activeId)?.color.toLowerCase();
   const fileInput = useRef<HTMLInputElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const [fileMsg, setFileMsg] = useState('');
@@ -46,6 +48,13 @@ export function Panel({ editor, onShowJson }: Props) {
         <div className="row">
           <button onClick={() => editor.addFigure()}>Add figure</button>
           <button disabled={noActive} onClick={() => editor.duplicate()}>Duplicate</button>
+        </div>
+        <div className="swatches" role="group" aria-label="Colour of the selected figure">
+          {COLORS.map(c => (
+            <button key={c.hex} className="swatch" style={{ background: c.hex }} disabled={noActive}
+              aria-label={c.name} title={c.name} aria-pressed={c.hex === activeColor}
+              onClick={() => editor.setColor(c.hex)} />
+          ))}
         </div>
       </div>
 

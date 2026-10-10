@@ -21,6 +21,8 @@ export interface Body {
   /** Which rig bone a ray hit on one of `pickables` belongs to. */
   boneAt(hit: Intersection): BoneName | null;
   setHighlight(bone: BoneName | null): void;
+  /** Recolour the body, as a CSS colour. */
+  setColor(color: string): void;
   /** Copy the rig pose into the body. Called every frame and before raycasts or bounds. */
   update(): void;
   /** World-space bounds of the posed body. Call `update` first. */

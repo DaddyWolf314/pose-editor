@@ -57,4 +57,17 @@ export const LABEL: Record<BoneName, string> = {
   rightUpperLeg: 'right thigh', rightLowerLeg: 'right shin', rightFoot: 'right foot',
 };
 
-export const PALETTE = ['#c9a57a', '#6f8fb8', '#8aa978', '#a585b5', '#c98b8b', '#7fb0ad'];
+/** Pastel figure colours, offered in the panel and given to new figures in turn. */
+export const COLORS = [
+  { name: 'Peach', hex: '#f6c3a1' },
+  { name: 'Baby blue', hex: '#a9c8ec' },
+  { name: 'Mint', hex: '#b5e2b8' },
+  { name: 'Lavender', hex: '#c9b8e8' },
+  { name: 'Rose', hex: '#f3b3c6' },
+  { name: 'Aqua', hex: '#a6dcd6' },
+  { name: 'Butter', hex: '#f4e1a1' },
+  { name: 'Coral', hex: '#f2a99f' },
+  { name: 'Lilac', hex: '#e2b6e4' },
+  { name: 'Sage', hex: '#cad7b0' },
+] as const;
+export const PALETTE: readonly string[] = COLORS.map(c => c.hex);

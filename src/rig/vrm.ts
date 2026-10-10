@@ -162,6 +162,8 @@ export class VrmBody implements Body {
 
   setHighlight(bone: BoneName | null): void { this.marker.show(bone); }
 
+  setColor(color: string): void { this.material.color.set(color); }
+
   bounds(target: Box3): Box3 {
     target.makeEmpty();
     const b = new Box3();

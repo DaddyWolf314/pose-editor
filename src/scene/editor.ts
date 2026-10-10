@@ -538,6 +538,17 @@ export class Editor {
     this.emit();
   }
 
+  /** Recolour the active figure: its body and its floor ring. */
+  setColor(color: string): void {
+    const a = this.active;
+    if (!a || a.color === color) return;
+    this.pushUndo();
+    a.color = color;
+    a.body.setColor(color);
+    a.ring.material.color.set(color);
+    this.emit(); this.save();
+  }
+
   /** Collisions apply to later drags and drops; existing poses are left as they are. */
   setCollisions(on: boolean): void {
     this.collide = on;
