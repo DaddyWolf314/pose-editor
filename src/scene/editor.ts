@@ -1,7 +1,7 @@
 // The editor: owns the figures, selection, undo stack and autosave, and exposes commands plus a
 // read-only UI snapshot for React. Scene state lives in three.js objects and is serialized to
 // SceneData JSON on demand, exactly as in the prototype.
-import { Box3, Quaternion, Raycaster, Vector2, Vector3 } from 'three';
+import { Box3, Color, Quaternion, Raycaster, Vector2, Vector3 } from 'three';
 import { aimHead, poleFor, settleLimb, solveSpine } from '../rig/chains';
 import { solveLimb } from '../rig/ik';
 import { clampBone } from '../rig/limits';
@@ -643,6 +643,28 @@ export class Editor {
     this.photo = null;
     this.stage.setBackdrop(null);
     this.setPhotoUi({ loaded: false, message: '' });
+  }
+
+  /** Largest width or height `renderImage` accepts. */
+  maxImageSize(): number {
+    return this.stage.maxCaptureSize;
+  }
+
+  /**
+   * Render the scene as a PNG of `width` by `height`, without the grid, handles, floor rings, gizmo,
+   * bone highlight or photo. `background` is a CSS colour, or null for transparent.
+   */
+  renderImage(width: number, height: number, background: string | null): Promise<Blob> {
+    for (const f of this.figures) f.body.setHighlight(null);
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = this.stage.capture(width, height, background ? new Color(background) : null,
+        [...this.handles.list, ...this.figures.map(f => f.ring)]);
+    } finally {
+      this.highlight();
+    }
+    return new Promise((resolve, reject) =>
+      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('The browser could not encode the image.'))), 'image/png'));
   }
 
   sceneJson(): string {

@@ -6,9 +6,9 @@ import { COLORS } from '../rig/skeleton';
 import type { Editor } from '../scene/editor';
 import { useEditorUi } from './useEditor';
 
-interface Props { editor: Editor; onShowJson: (importing: boolean) => void }
+interface Props { editor: Editor; onShowJson: (importing: boolean) => void; onRender: () => void }
 
-export function Panel({ editor, onShowJson }: Props) {
+export function Panel({ editor, onShowJson, onRender }: Props) {
   const ui = useEditorUi(editor);
   const [closed, setClosed] = useState(false);
   const noActive = !ui.activeId;
@@ -158,6 +158,13 @@ export function Panel({ editor, onShowJson }: Props) {
           </>
         )}
         {ui.photo.message && <p className="note" role="status">{ui.photo.message}</p>}
+      </div>
+
+      <div className="group">
+        <h2>Image</h2>
+        <div className="row">
+          <button onClick={onRender}>Render image{'\u2026'}</button>
+        </div>
       </div>
 
       <div className="group">

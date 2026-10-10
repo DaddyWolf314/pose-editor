@@ -59,8 +59,26 @@ label.check{display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointe
 #json{width:100%;height:240px;resize:vertical;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;
   background:var(--stage);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
 #jsonmsg{min-height:1.4em;margin:6px 0;color:var(--muted)}
+#frameBox{position:absolute;inset:0;pointer-events:none;overflow:hidden;container-type:size;
+  display:flex;align-items:center;justify-content:center}
+#frame{width:min(100cqw,calc(100cqh * var(--ar)));height:min(100cqh,calc(100cqw / var(--ar)));flex:none;
+  outline:1px dashed var(--accent);box-shadow:0 0 0 100vmax rgba(10,14,18,.4)}
+#render{position:absolute;top:12px;right:12px;width:248px;max-height:calc(100% - 24px);overflow:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+#render h2{font-size:15px;font-weight:650;margin:0}
+#render .note{margin:4px 0 8px}
+#render .dims{display:flex;align-items:flex-end;gap:6px;margin-bottom:6px}
+#render .dims label{flex:1;display:grid;gap:2px;font-size:12px;color:var(--muted)}
+#render .dims .swap{padding:5px 8px}
+#render input[type=number]{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);
+  border-radius:6px;padding:5px 7px;width:100%;min-width:0}
+#render input[aria-invalid="true"]{border-color:#d0453a}
+#render .bg{margin-top:4px}
+#render .colour{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+#render .colour input{width:48px;height:28px;padding:0 2px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+#render .colour input:disabled{opacity:.45}
 #fail{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center}
-@media (max-width:560px){ #panel{width:200px} #hint{font-size:12px} }
+@media (max-width:560px){ #panel{width:200px} #hint{font-size:12px} #render{top:auto;bottom:56px;right:12px;width:220px} }
 select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 7px;width:100%}
 select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 select:disabled{opacity:.45}

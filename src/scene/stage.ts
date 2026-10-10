@@ -1,7 +1,7 @@
 // Renderer, camera, lights, camera orbit, gizmo, floor grid and theme. Knows nothing about figures.
 import {
-  Color, DirectionalLight, GridHelper, HemisphereLight, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry,
-  SRGBColorSpace, Scene, Texture, Vector3, WebGLRenderer,
+  Color, DirectionalLight, GridHelper, HemisphereLight, MathUtils, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry,
+  SRGBColorSpace, Scene, Texture, Vector3, WebGLRenderTarget, WebGLRenderer, type Object3D,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -125,6 +125,69 @@ export class Stage {
     this.camera.updateProjectionMatrix();
     this.orbit.target.set(...cam.target);
     this.orbit.update();
+  }
+
+  /** Largest image side `capture` accepts. */
+  get maxCaptureSize(): number {
+    return Math.min(8192, this.renderer.capabilities.maxTextureSize);
+  }
+
+  /**
+   * Render the view to a `width` by `height` image, without the grid, gizmo or photo, and with
+   * `hide` hidden too. The image covers the largest centred rectangle of that aspect inside the view
+   * (see `captureFrame`). `background` null leaves it transparent.
+   */
+  capture(width: number, height: number, background: Color | null, hide: readonly Object3D[]): HTMLCanvasElement {
+    const cam = this.camera.clone();
+    const aspect = width / height;
+    // Narrower than the view: same vertical field, cropped sides. Wider: the vertical field shrinks.
+    if (aspect > this.camera.aspect) {
+      const t = Math.tan(MathUtils.degToRad(this.camera.fov / 2)) * this.camera.aspect / aspect;
+      cam.fov = MathUtils.radToDeg(2 * Math.atan(t));
+    }
+    cam.aspect = aspect;
+    cam.updateProjectionMatrix();
+
+    const r = this.renderer;
+    const rt = new WebGLRenderTarget(width, height, {
+      samples: Math.min(4, r.capabilities.maxSamples), colorSpace: SRGBColorSpace,
+    });
+    const hidden = [this.grid, this.tc.getHelper(), this.backdrop, ...hide].filter((o): o is Object3D => !!o && o.visible);
+    const clear = r.getClearColor(new Color()), clearAlpha = r.getClearAlpha();
+    const px = new Uint8Array(width * height * 4);
+    try {
+      hidden.forEach(o => { o.visible = false; });
+      r.setClearColor(background ?? 0x000000, background ? 1 : 0);
+      r.setRenderTarget(rt);
+      r.clear();
+      r.render(this.scene, cam);
+      r.readRenderTargetPixels(rt, 0, 0, width, height, px);
+    } finally {
+      r.setRenderTarget(null);
+      r.setClearColor(clear, clearAlpha);
+      hidden.forEach(o => { o.visible = true; });
+      rt.dispose();
+    }
+
+    // WebGL rows run bottom to top. A transparent clear blends edges toward black, so unpremultiply.
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d')!;
+    const img = ctx.createImageData(width, height);
+    const row = width * 4;
+    for (let y = 0; y < height; y++) {
+      const src = (height - 1 - y) * row, dst = y * row;
+      for (let i = 0; i < row; i += 4) {
+        const a = px[src + i + 3];
+        const k = !background && a > 0 && a < 255 ? 255 / a : 1;
+        img.data[dst + i] = Math.min(255, px[src + i] * k);
+        img.data[dst + i + 1] = Math.min(255, px[src + i + 1] * k);
+        img.data[dst + i + 2] = Math.min(255, px[src + i + 2] * k);
+        img.data[dst + i + 3] = a;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
   }
 
   start(frame: () => void): void {
