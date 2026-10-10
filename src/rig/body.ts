@@ -4,7 +4,7 @@
 import {
   CylinderGeometry, Mesh, MeshBasicMaterial, Vector3, type Box3, type Group, type Intersection, type Object3D,
 } from 'three';
-import type { BoneName, RestOffsets, Vec3Tuple } from './skeleton';
+import { REST, type BoneName, type RestOffsets, type Vec3Tuple } from './skeleton';
 
 export const MANNEQUIN_ID = 'mannequin';
 
@@ -14,6 +14,8 @@ export interface Body {
   /** Model id this body shows: MANNEQUIN_ID or a model library id. */
   readonly modelId: string;
   readonly rest: RestOffsets;
+  /** Rough thickness of each body part about its joint, in metres, for contact with props. */
+  readonly radii: BoneRadii;
   /** Meshes a click can hit. */
   readonly pickables: Object3D[];
   /** Which rig bone a ray hit on one of `pickables` belongs to. */
@@ -24,6 +26,26 @@ export interface Body {
   /** World-space bounds of the posed body. Call `update` first. */
   bounds(target: Box3): Box3;
   dispose(): void;
+}
+
+export type BoneRadii = Record<BoneName, number>;
+
+/**
+ * Radii of the procedural mannequin's parts. The foot's is the ankle's height above the sole, and the
+ * hips' the pelvis's depth below the hips joint, so a sphere of that size rests where the body would.
+ */
+export const MANNEQUIN_RADII: BoneRadii = {
+  hips: 0.11, spine: 0.1, chest: 0.13, neck: 0.04, head: 0.1,
+  leftUpperArm: 0.05, leftLowerArm: 0.04, leftHand: 0.035,
+  rightUpperArm: 0.05, rightLowerArm: 0.04, rightHand: 0.035,
+  leftUpperLeg: 0.07, leftLowerLeg: 0.05, leftFoot: 0.07,
+  rightUpperLeg: 0.07, rightLowerLeg: 0.05, rightFoot: 0.07,
+};
+
+/** Mannequin radii scaled by a body's hip height, for bodies whose thickness is not measured. */
+export function scaledRadii(rest: RestOffsets): BoneRadii {
+  const s = rest.hips[1] / REST.hips[1];
+  return Object.fromEntries(Object.entries(MANNEQUIN_RADII).map(([k, r]) => [k, r * s])) as BoneRadii;
 }
 
 // The bone a marker points along: its main child, or a fixed stub for end bones.

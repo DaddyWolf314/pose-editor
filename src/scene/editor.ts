@@ -7,6 +7,8 @@ import { solveLimb } from '../rig/ik';
 import { clampBone } from '../rig/limits';
 import type { PhotoCamera, PoseEstimator } from '../pose/estimator';
 import { PROPS, PROP_KINDS, type PropKind } from '../props/catalog';
+import type { Colliders } from '../props/collide';
+import { bodySpheres, collidersFor, dropGap } from '../props/contact';
 import { PropKit, createProp, disposeProp, propData, propExtentZ, resizeProp, type Prop } from '../props/prop';
 import { DEFAULT_MODEL_ID, ModelLibrary, type ModelInfo } from '../rig/models';
 import { BONES, LIMBS, PALETTE, type LimbEnd } from '../rig/skeleton';
@@ -38,6 +40,8 @@ export interface EditorUi {
   mode: Mode;
   pinFeet: boolean;
   limits: boolean;
+  /** Whether figures meet props and the floor. */
+  collisions: boolean;
   /** Whether the active figure's head follows a look target. */
   activeLook: boolean;
   canUndo: boolean;
@@ -66,6 +70,9 @@ export class Editor {
   private mode: Mode = 'move';
   private pinFeet = true;
   private limits = true;
+  private collide = true;
+  /** Built on demand from the props; null whenever a prop has changed since. */
+  private solids: Colliders | null = null;
   private drag: Drag | null = null;
   private counter = 0;
   private undoStack: string[] = [];
@@ -169,6 +176,7 @@ export class Editor {
       mode: this.mode,
       pinFeet: this.pinFeet,
       limits: this.limits,
+      collisions: this.collide,
       activeLook: !!this.active?.look,
       canUndo: this.undoStack.length > 0,
       hint: hintText(this.sel, this.mode, this.figures.length),
@@ -200,6 +208,7 @@ export class Editor {
     const p = createProp(d, this.propKit);
     this.stage.scene.add(p.root);
     this.props.push(p);
+    this.solids = null;
     return p;
   }
 
@@ -207,6 +216,11 @@ export class Editor {
     disposeProp(p);
     const i = this.props.indexOf(p);
     if (i >= 0) this.props.splice(i, 1);
+    this.solids = null;
+  }
+
+  private colliders(): Colliders {
+    return (this.solids ??= collidersFor(this.props));
   }
 
   sceneData(): SceneData {
@@ -305,11 +319,19 @@ export class Editor {
     if (!sel) return;
     if (sel.kind === 'prop') {
       sel.prop.root.position.y = Math.max(0, sel.prop.root.position.y);
+      this.solids = null;
       return;
     }
     const f = sel.fig;
     if (sel.kind === 'ik') {
-      this.reach(f, sel.key, this.handles.meshes[sel.key].position, this.drag && this.drag.endQuat);
+      // With collisions on, the hand or foot travels from where it is toward the handle and stops at a
+      // surface; the handle itself still follows the pointer.
+      let target = this.handles.meshes[sel.key].position;
+      if (this.collide) {
+        f.root.updateMatrixWorld(true);
+        target = this.colliders().sweepSphere(f.bones[sel.key].getWorldPosition(new Vector3()), target, f.body.radii[sel.key]);
+      }
+      this.reach(f, sel.key, target, this.drag && this.drag.endQuat);
     } else if (sel.kind === 'chest') {
       solveSpine(f.bones, this.handles.meshes.chest.position, this.limits);
     } else if (sel.kind === 'look') {
@@ -320,7 +342,11 @@ export class Editor {
     } else if (sel.kind === 'hips') {
       if (this.stage.tc.object === this.handles.meshes.hips) {
         f.root.updateMatrixWorld(true);
-        f.bones.hips.position.copy(f.root.worldToLocal(this.handles.meshes.hips.position.clone()));
+        // With collisions on, the pelvis travels from where it is toward the handle and rests on a seat,
+        // a bed or the floor rather than passing through.
+        let p = this.handles.meshes.hips.position.clone();
+        if (this.collide) p = this.colliders().sweepSphere(f.bones.hips.getWorldPosition(new Vector3()), p, f.body.radii.hips);
+        f.bones.hips.position.copy(f.root.worldToLocal(p));
       }
       this.pinFeetOf(f);
     } else if (sel.kind === 'bone' && sel.key === 'hips') {
@@ -409,8 +435,10 @@ export class Editor {
     this.pushUndo();
     a.root.updateMatrixWorld(true);
     a.body.update();
-    const bb = a.body.bounds(new Box3());
-    a.bones.hips.position.y -= bb.min.y;
+    // The floor meets the body's exact bounds; props meet the body's contact spheres.
+    let gap = a.body.bounds(new Box3()).min.y;
+    if (this.collide) gap = Math.min(gap, dropGap(bodySpheres(a.bones, a.body.radii), this.colliders()));
+    a.bones.hips.position.y -= gap;
     if (this.sel) this.select(this.sel);
     this.save();
   }
@@ -454,6 +482,7 @@ export class Editor {
     const tag = id + ':' + key;
     if (this.resizing !== tag) { this.pushUndo(); this.resizing = tag; }
     resizeProp(p, key, value, this.propKit);
+    this.solids = null;
     this.emit(); this.save();
   }
 
@@ -501,6 +530,12 @@ export class Editor {
   /** Joint limits apply to every later solve and rotation; existing poses are left as they are. */
   setLimits(on: boolean): void {
     this.limits = on;
+    this.emit();
+  }
+
+  /** Collisions apply to later drags and drops; existing poses are left as they are. */
+  setCollisions(on: boolean): void {
+    this.collide = on;
     this.emit();
   }
 

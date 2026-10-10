@@ -10,7 +10,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import {
   VRMHumanoid, VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName, type VRMHumanBones,
 } from '@pixiv/three-vrm';
-import { BoneMarker, type Body, type RigBones } from './body';
+import { BoneMarker, scaledRadii, type Body, type BoneRadii, type RigBones } from './body';
 import { BONES, type BoneName, type RestOffsets, type Vec3Tuple } from './skeleton';
 
 export interface VrmTemplate {
@@ -59,6 +59,7 @@ const _q = new Quaternion(), _p = new Vector3();
 export class VrmBody implements Body {
   readonly modelId: string;
   readonly rest: RestOffsets;
+  readonly radii: BoneRadii;
   readonly pickables: Mesh[] = [];
   private scene: Group;
   private humanoid: VRMHumanoid;
@@ -73,6 +74,7 @@ export class VrmBody implements Body {
   constructor(modelId: string, t: VrmTemplate, root: Group, bones: RigBones, color: string) {
     this.modelId = modelId;
     this.rest = t.rest;
+    this.radii = scaledRadii(t.rest);
     this.bones = bones;
 
     const scene = SkeletonUtils.clone(t.vrm.scene) as Group;

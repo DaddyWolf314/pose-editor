@@ -88,6 +88,30 @@ describe('Colliders.resolveSphere', () => {
   });
 });
 
+describe('Colliders.sweepSphere', () => {
+  const c = new Colliders([chair()]);
+
+  test('a free path ends at the target', () => {
+    nearV(c.sweepSphere(new Vector3(0.6, 1, 0), new Vector3(0.8, 0.5, 0.3), 0.1), 0.8, 0.5, 0.3, 1e-9);
+  });
+
+  test('does not pass through the thin seat, where resolveSphere alone would', () => {
+    const from = new Vector3(0, 0.7, 0.05), to = new Vector3(0, 0.15, 0.05);
+    nearV(c.resolveSphere(to, 0.1), 0, 0.15, 0.05);
+    nearV(c.sweepSphere(from, to, 0.1), 0, 0.55, 0.05, 1e-9);
+  });
+
+  test('slides along the seat toward a target inside it', () => {
+    // Pushed down and forward into the seat: ends on top of the seat as far forward as the target.
+    nearV(c.sweepSphere(new Vector3(0, 0.7, -0.05), new Vector3(0, 0.4, 0.1), 0.1), 0, 0.55, 0.1, 1e-4);
+  });
+
+  test('stops at the backrest', () => {
+    const out = c.sweepSphere(new Vector3(0, 0.75, 0.2), new Vector3(0, 0.75, -0.6), 0.1);
+    nearV(out, 0, 0.75, -0.08, 1e-9);
+  });
+});
+
 describe('Colliders.supportBelow', () => {
   const c = new Colliders([chair()]);
 

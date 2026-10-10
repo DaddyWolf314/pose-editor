@@ -93,6 +93,30 @@ export class Colliders {
   }
 
   /**
+   * Move a sphere from `from` toward `to` in steps of at most half its radius, resolving after each,
+   * so it stops at the first surface in its way and slides along it rather than passing through a
+   * thin part such as a seat. `from` should be clear; it is resolved first if not. Returns a new vector.
+   */
+  sweepSphere(from: Vector3, to: Vector3, r: number): Vector3 {
+    let p = this.resolveSphere(from, r);
+    const step = Math.max(r * 0.5, 1e-3);
+    // Sliding gains less than a full step each time, so allow several times the straight-line count.
+    const steps = 4 * Math.ceil(p.distanceTo(to) / step) + 8;
+    const d = new Vector3();
+    for (let i = 0; i < steps; i++) {
+      // Head for the target from wherever the last step left the sphere, so blocked motion becomes sliding.
+      d.subVectors(to, p);
+      const len = d.length();
+      if (len < 1e-9) break;
+      const next = this.resolveSphere(d.multiplyScalar(Math.min(1, step / len)).add(p), r);
+      const moved = next.distanceToSquared(p);
+      p = next;
+      if (moved < 1e-14) break;
+    }
+    return p;
+  }
+
+  /**
    * Height of the highest support surface under `p`: the top of a solid box whose footprint, widened
    * by `margin`, contains `p` and whose top is at or below `p`; else the floor (0), or -Infinity
    * without one.

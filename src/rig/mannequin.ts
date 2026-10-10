@@ -2,7 +2,7 @@
 import {
   BoxGeometry, CylinderGeometry, Mesh, MeshStandardMaterial, SphereGeometry, Vector3, type Box3, type Intersection,
 } from 'three';
-import { MANNEQUIN_ID, type Body, type RigBones } from './body';
+import { MANNEQUIN_ID, MANNEQUIN_RADII, type Body, type RigBones } from './body';
 import { BONES, REST, type BoneName, type Vec3Tuple } from './skeleton';
 
 function cyl(r0: number, r1: number, to: Vec3Tuple): Mesh {
@@ -46,6 +46,7 @@ function partsFor(name: BoneName): Mesh[] {
 export class MannequinBody implements Body {
   readonly modelId = MANNEQUIN_ID;
   readonly rest = REST;
+  readonly radii = MANNEQUIN_RADII;
   readonly pickables: Mesh[] = [];
   private meshes = {} as Record<BoneName, Mesh[]>;
   private mat: MeshStandardMaterial;

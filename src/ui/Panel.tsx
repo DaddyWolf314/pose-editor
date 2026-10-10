@@ -114,11 +114,14 @@ export function Panel({ editor, onShowJson }: Props) {
         <h2>Pose</h2>
         <div className="row">
           <button disabled={noActive} onClick={() => editor.resetPose()}>Reset pose</button>
-          <button disabled={noActive} onClick={() => editor.dropToFloor()}>Drop to floor</button>
+          <button disabled={noActive} onClick={() => editor.dropToFloor()}>{ui.collisions ? 'Drop to surface' : 'Drop to floor'}</button>
           <button disabled={!ui.canUndo} onClick={() => editor.undo()}>Undo</button>
         </div>
         <label className="check">
           <input type="checkbox" checked={ui.limits} onChange={e => editor.setLimits(e.target.checked)} /> Joint limits
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={ui.collisions} onChange={e => editor.setCollisions(e.target.checked)} /> Collisions with props and floor
         </label>
         <label className="check">
           <input type="checkbox" disabled={noActive} checked={ui.activeLook} onChange={e => editor.setLook(e.target.checked)} /> Head follows a look target
