@@ -2,7 +2,7 @@
 // collision core decides how they touch. World space throughout; call `updateMatrixWorld` first.
 import { Quaternion, Vector3 } from 'three';
 import type { BoneRadii, RigBones } from '../rig/body';
-import { BONES } from '../rig/skeleton';
+import { BONES, type Limb } from '../rig/skeleton';
 import type { Prop } from './prop';
 import { Colliders } from './collide';
 
@@ -33,6 +33,17 @@ export function bodySpheres(bones: RigBones, radii: BoneRadii): Sphere[] {
   const head = bones.head, r = radii.head;
   out.push({ c: new Vector3(0, r, 0).applyQuaternion(head.getWorldQuaternion(new Quaternion())).add(head.getWorldPosition(new Vector3())), r });
   return out;
+}
+
+/**
+ * How deep a limb sinks into the props or the floor: the deeper of its two segments, each a capsule of
+ * the radius of the bone it runs along. For `settleLimb`'s cost, which squares it.
+ */
+export function limbDepth(bones: RigBones, radii: BoneRadii, limb: Limb, colliders: Colliders): number {
+  const A = bones[limb.upper].getWorldPosition(new Vector3());
+  const B = bones[limb.lower].getWorldPosition(new Vector3());
+  const C = bones[limb.end].getWorldPosition(new Vector3());
+  return Math.max(colliders.capsuleDepth(A, B, radii[limb.upper]), colliders.capsuleDepth(B, C, radii[limb.lower]));
 }
 
 /**

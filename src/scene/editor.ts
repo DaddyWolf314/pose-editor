@@ -8,7 +8,7 @@ import { clampBone } from '../rig/limits';
 import type { PhotoCamera, PoseEstimator } from '../pose/estimator';
 import { PROPS, PROP_KINDS, type PropKind } from '../props/catalog';
 import type { Colliders } from '../props/collide';
-import { bodySpheres, collidersFor, dropGap } from '../props/contact';
+import { bodySpheres, collidersFor, dropGap, limbDepth } from '../props/contact';
 import { PropKit, createProp, disposeProp, propData, propExtentZ, resizeProp, type Prop } from '../props/prop';
 import { DEFAULT_MODEL_ID, ModelLibrary, type ModelInfo } from '../rig/models';
 import { BONES, LIMBS, PALETTE, type LimbEnd } from '../rig/skeleton';
@@ -281,13 +281,18 @@ export class Editor {
     this.emit();
   }
 
-  /** Two-bone IK toward `target`, then joint limits. `endQuat` is the end bone's world rotation to keep. */
+  /**
+   * Two-bone IK toward `target`, then joint limits. `endQuat` is the end bone's world rotation to keep.
+   * With collisions on too, the limb's swivel also steers the elbow or knee out of props and the floor.
+   */
   private reach(f: Figure, k: LimbEnd, target: Vector3, endQuat?: Quaternion | null): void {
     const L = LIMBS[k];
     const keep = endQuat ?? f.bones[L.end].getWorldQuaternion(new Quaternion());
     const hint = poleFor(f.bones, L.kind);
     solveLimb(f.bones[L.upper], f.bones[L.lower], f.bones[L.end], target, hint, endQuat);
-    if (this.limits) settleLimb(f.bones, L, keep, hint);
+    if (!this.limits) return;
+    const solids = this.collide ? this.colliders() : null;
+    settleLimb(f.bones, L, keep, hint, solids ? () => limbDepth(f.bones, f.body.radii, L, solids) ** 2 : undefined);
   }
 
   private pinFeetOf(f: Figure): void {

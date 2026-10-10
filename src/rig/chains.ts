@@ -19,10 +19,12 @@ export function poleFor(bones: RigBones, kind: LimbKind): Vector3 {
  * After `solveLimb`, make the limb anatomical. The IK keeps whichever way the limb was bent, which from
  * a straight limb can be sideways or backwards, so several swivels of the limb about the line from its
  * root to the target are tried: the IK's own, the one that points the middle joint along `pole`, and
- * every 30 degrees. Swivelling moves no joint. The IK's swivel wins whenever its clamped result still
- * reaches; otherwise the swivel whose clamped result lands the end bone closest wins.
+ * every 30 degrees. Swivelling moves no joint but the middle one. Each swivel scores the squared
+ * distance its clamped result leaves the end bone from the goal, plus `cost` of the settled limb if
+ * given (squared metres too, such as the square of how deep the limb sinks into a prop). The IK's
+ * swivel wins whenever it scores nearly zero; otherwise the lowest score wins, the IK's on a tie.
  */
-export function settleLimb(bones: RigBones, limb: Limb, endWorld: Quaternion, pole: Vector3): void {
+export function settleLimb(bones: RigBones, limb: Limb, endWorld: Quaternion, pole: Vector3, cost?: () => number): void {
   const upper = bones[limb.upper], lower = bones[limb.lower], end = bones[limb.end];
   const A = upper.getWorldPosition(new Vector3());
   const goal = end.getWorldPosition(new Vector3());
@@ -31,7 +33,7 @@ export function settleLimb(bones: RigBones, limb: Limb, endWorld: Quaternion, po
     upper.quaternion.copy(q[0]); lower.quaternion.copy(q[1]); end.quaternion.copy(q[2]);
     upper.updateMatrixWorld(true);
   };
-  const err = () => end.getWorldPosition(new Vector3()).distanceToSquared(goal);
+  const err = () => end.getWorldPosition(new Vector3()).distanceToSquared(goal) + (cost ? cost() : 0);
 
   settleSide(bones, limb, endWorld);
   let best = [upper.quaternion.clone(), lower.quaternion.clone(), end.quaternion.clone()];

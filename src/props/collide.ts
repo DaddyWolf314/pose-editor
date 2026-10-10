@@ -1,7 +1,6 @@
 // Planar collision against props: every solid catalog box is a convex solid bounded by six planes, and
 // the floor is the plane y = 0. Pure math on three.js vectors, for posing aids rather than physics.
 // Props turn about +Y only, so a box's top face stays a horizontal support surface in world space.
-// Imports nothing relative, so `node --test` can load it directly (see collide.test.ts).
 import { Matrix4, Vector3 } from 'three';
 
 /** An axis-aligned box in prop space. Catalog `PropBox`es fit this shape. */
